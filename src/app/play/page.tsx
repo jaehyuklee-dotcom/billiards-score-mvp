@@ -1,5 +1,6 @@
 "use client";
 
+import { saveMatch } from "@/lib/matches";
 import { ChevronLeft, Trophy } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useState } from "react";
@@ -12,9 +13,18 @@ function clampToNonNegative(n: number) {
 type WinModalProps = {
   winnerName: string;
   onResume: () => void;
+  onGoHome: () => Promise<void>;
 };
 
-function WinModal({ winnerName, onResume }: WinModalProps) {
+function WinModal({ winnerName, onResume, onGoHome }: WinModalProps) {
+  const [saving, setSaving] = useState(false);
+
+  const handleGoHome = async () => {
+    setSaving(true);
+    await onGoHome();
+    setSaving(false);
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0b0b0b]/95">
       <div className="mx-auto flex w-full max-w-[420px] flex-col items-center justify-center px-6 pb-24">
@@ -42,12 +52,14 @@ function WinModal({ winnerName, onResume }: WinModalProps) {
           </button>
         </div>
 
-        <Link
-          href="/"
-          className="mt-4 flex h-[60px] w-full items-center justify-center rounded-md bg-[#1fe85b] text-[20px] font-extrabold text-[#0b0b0b]"
+        <button
+          type="button"
+          onClick={handleGoHome}
+          disabled={saving}
+          className="mt-4 flex h-[60px] w-full items-center justify-center rounded-md bg-[#1fe85b] text-[20px] font-extrabold text-[#0b0b0b] disabled:opacity-70"
         >
-          홈으로
-        </Link>
+          {saving ? "저장 중..." : "홈으로"}
+        </button>
 
         <p className="mt-6 text-center text-[13px] font-medium text-white/50">
           혹시 실수로 경기 승리 화면으로 오셨다면 돌아가기를 터치해주세요
@@ -525,6 +537,25 @@ function PlayContent() {
         <WinModal
           winnerName={winnerName}
           onResume={() => setShowWinModal(false)}
+          onGoHome={async () => {
+            if (players.length >= 2) {
+              const winnerIdx = players.findIndex((p) => p.name === winnerName);
+              const myScore = players[0]?.score ?? 0;
+              const opponentScore = players[1]?.score ?? 0;
+              const myInnings = innings[0] ?? 0;
+              const isWin = winnerIdx === 0;
+              const ok = await saveMatch({
+                myScore,
+                opponentScore,
+                innings: myInnings,
+                isWin,
+              });
+              if (ok) router.push("/");
+              else alert("저장에 실패했습니다.");
+            } else {
+              router.push("/");
+            }
+          }}
         />
       )}
     </div>
