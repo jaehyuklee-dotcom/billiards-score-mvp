@@ -2,7 +2,7 @@
 
 import { ChevronLeft, Trophy } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function clampToNonNegative(n: number) {
@@ -80,7 +80,7 @@ type GameState = {
   remainingFinish: number[];
 };
 
-export default function PlayPage() {
+function PlayContent() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -528,6 +528,22 @@ export default function PlayPage() {
         />
       )}
     </div>
+  );
+}
+
+function PlayFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#0b0b0b]">
+      <div className="text-[18px] font-semibold text-white/70">로딩 중...</div>
+    </div>
+  );
+}
+
+export default function PlayPage() {
+  return (
+    <Suspense fallback={<PlayFallback />}>
+      <PlayContent />
+    </Suspense>
   );
 }
 
