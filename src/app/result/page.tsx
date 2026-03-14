@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Trophy } from "lucide-react";
 
-export default function ResultPage() {
+function ResultContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const winner = sp.get("winner")?.trim() || "OOO";
@@ -56,6 +57,22 @@ export default function ResultPage() {
         </button>
       </main>
     </div>
+  );
+}
+
+function ResultFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#0b0b0b]">
+      <div className="text-[18px] font-semibold text-white/70">로딩 중...</div>
+    </div>
+  );
+}
+
+export default function ResultPage() {
+  return (
+    <Suspense fallback={<ResultFallback />}>
+      <ResultContent />
+    </Suspense>
   );
 }
 
