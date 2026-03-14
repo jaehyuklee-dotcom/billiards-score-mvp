@@ -3,7 +3,7 @@ import {
   BarChart3,
   CalendarDays,
   FileText,
-  Home,
+  Home as HomeIcon,
   Play,
   Settings,
   Target,
@@ -11,7 +11,7 @@ import {
   User,
 } from "lucide-react";
 
-export default function HomePage() {
+export default function Home() {
   return (
     <div className="min-h-screen bg-[#0b0b0b] text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-24 pt-10">
@@ -51,10 +51,7 @@ export default function HomePage() {
           {/* 2. 목표 점수 */}
           <div className="w-full rounded-2xl border border-white/5 bg-[#1a1a1a] p-6">
             <div className="flex items-center gap-3">
-              <Target
-                className="h-6 w-6 text-[#1fe85b]"
-                aria-hidden="true"
-              />
+              <Target className="h-6 w-6 text-[#1fe85b]" aria-hidden="true" />
               <h2 className="text-[14px] font-semibold text-white/90">
                 목표 점수
               </h2>
@@ -120,7 +117,7 @@ export default function HomePage() {
           className="flex flex-col items-center gap-1 text-[#1fe85b]"
           aria-current="page"
         >
-          <Home className="h-6 w-6" aria-hidden="true" />
+          <HomeIcon className="h-6 w-6" aria-hidden="true" />
           <span className="text-[12px] font-medium">홈</span>
         </Link>
         <Link
