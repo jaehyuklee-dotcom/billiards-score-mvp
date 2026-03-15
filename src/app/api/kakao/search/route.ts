@@ -9,8 +9,8 @@ export type KakaoPlace = {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get("query");
-  const apiKey = process.env.NEXT_PUBLIC_KAKAO_API_KEY;
+  const query = searchParams.get("query")?.trim() ?? "";
+  const apiKey = process.env.NEXT_PUBLIC_KAKAO_API_KEY?.trim();
 
   if (!apiKey) {
     return NextResponse.json(
@@ -19,16 +19,16 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!query || !query.trim()) {
+  if (!query) {
     return NextResponse.json(
-      { error: "query is required" },
+      { error: "query is required", message: "당구장 이름을 입력하세요" },
       { status: 400 }
     );
   }
 
   try {
     const url = new URL("https://dapi.kakao.com/v2/local/search/keyword.json");
-    url.searchParams.set("query", `${query.trim()} 당구장`);
+    url.searchParams.set("query", `${query} 당구장`);
     url.searchParams.set("size", "15");
 
     const res = await fetch(url.toString(), {

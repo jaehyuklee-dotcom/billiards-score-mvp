@@ -23,6 +23,28 @@ export type ProfileLegacy = Profile & { region?: string };
 export const REGION_SI_LIST = REGION_SI;
 export { getRegionGu, getRegionDong, REGION_HIERARCHY };
 
+/** 닉네임 중복 여부 조회. true = 사용 가능, false = 중복 */
+export async function checkNicknameDuplicate(
+  nickname: string,
+  excludeUserId?: string
+): Promise<{ duplicate: boolean }> {
+  const trimmed = nickname.trim();
+  if (!trimmed) return { duplicate: true };
+
+  const supabase = createClient();
+  let query = supabase
+    .from("profiles")
+    .select("id")
+    .ilike("nickname", trimmed);
+
+  if (excludeUserId) {
+    query = query.neq("user_id", excludeUserId);
+  }
+
+  const { data } = await query.limit(1);
+  return { duplicate: (data?.length ?? 0) > 0 };
+}
+
 export async function getProfile(userId: string): Promise<Profile | null> {
   const supabase = createClient();
   const { data, error } = await supabase

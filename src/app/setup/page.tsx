@@ -14,10 +14,15 @@ type PlayerSetup = {
   userId?: string;
 };
 
-const SCORE_ALERT_MSG = "당구 점수는 10단위로만 입력 가능합니다. (예: 120, 150, 200)";
+const SCORE_4GU_ALERT = "4구 점수는 10단위로만 입력 가능합니다. (예: 120, 150, 200)";
+const SCORE_3CUSHION_ALERT = "3쿠션 목표 점수를 입력해 주세요 (예: 17, 21)";
 
-function isValidScore10(val: number): boolean {
+function isValidScore4gu(val: number): boolean {
   return Number.isFinite(val) && val > 0 && val % 10 === 0;
+}
+
+function isValidScore3cushion(val: number): boolean {
+  return Number.isFinite(val) && val > 0 && Number.isInteger(val);
 }
 
 export default function SetupPage() {
@@ -29,6 +34,8 @@ export default function SetupPage() {
     { id: 1, name: "1번 선수", target: "400", guest: false, finish: "1" },
     { id: 2, name: "2번 선수", target: "400", guest: false, finish: "1" },
   ]);
+
+  const defaultTarget = gameType === "3" ? "20" : "400";
 
   const [p1LoadRecent, setP1LoadRecent] = useState(true);
   const [finishSameForAll, setFinishSameForAll] = useState(true);
@@ -98,7 +105,7 @@ export default function SetupPage() {
       const baseFinish = finishSameForAll ? prev[0]?.finish ?? "1" : "1";
       return [
         ...prev,
-        { id: nextId, name: `${nextId}번 선수`, target: "400", guest: false, finish: baseFinish },
+        { id: nextId, name: `${nextId}번 선수`, target: defaultTarget, guest: false, finish: baseFinish },
       ];
     });
   };
@@ -108,12 +115,14 @@ export default function SetupPage() {
     setPlayers((prev) => (prev.length > 2 ? prev.slice(0, -1) : prev));
   };
 
-  const validateAllScores = (): number | null => {
+  const validateAllScores = (): { invalidIdx: number | null; message: string } => {
+    const validator = gameType === "4" ? isValidScore4gu : isValidScore3cushion;
+    const message = gameType === "4" ? SCORE_4GU_ALERT : SCORE_3CUSHION_ALERT;
     for (let i = 0; i < players.length; i++) {
       const val = Number(players[i]?.target);
-      if (!isValidScore10(val)) return i;
+      if (!validator(val)) return { invalidIdx: i, message };
     }
-    return null;
+    return { invalidIdx: null, message: "" };
   };
 
   const playerLabelBgClasses = [
@@ -234,9 +243,9 @@ export default function SetupPage() {
           <button
             disabled={!canStart}
             onClick={() => {
-              const invalidIdx = validateAllScores();
+              const { invalidIdx, message } = validateAllScores();
               if (invalidIdx !== null) {
-                alert(SCORE_ALERT_MSG);
+                alert(message);
                 targetInputRefs.current[invalidIdx]?.focus();
                 return;
               }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  checkNicknameDuplicate,
   getProfile,
   getRegionDong,
   getRegionGu,
@@ -13,7 +14,7 @@ import {
 } from "@/lib/profiles";
 
 const SCORE_4GU_ALERT = "4구 점수는 10단위로만 입력 가능합니다. (예: 120, 150, 200)";
-const SCORE_3CUSHION_ALERT = "3쿠션 평균 점을 입력해 주세요 (예: 0.5, 1.2)";
+const SCORE_3CUSHION_ALERT = "3쿠션 목표 점수를 입력해 주세요 (예: 17, 21)";
 
 type KakaoPlace = {
   id: string;
@@ -27,7 +28,7 @@ function isValidScore4gu(val: number): boolean {
 }
 
 function isValidScore3cushion(val: number): boolean {
-  return Number.isFinite(val) && val >= 0;
+  return Number.isFinite(val) && val >= 0 && Number.isInteger(val);
 }
 
 function SelectWrapper({
@@ -106,6 +107,8 @@ export default function OnboardingPage() {
   const [openDong, setOpenDong] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [nicknameCheckStatus, setNicknameCheckStatus] = useState<"idle" | "checking" | "available" | "duplicate">("idle");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const siRef = useRef<HTMLDivElement>(null);
   const guRef = useRef<HTMLDivElement>(null);
   const dongRef = useRef<HTMLDivElement>(null);
@@ -157,9 +160,11 @@ export default function OnboardingPage() {
         router.replace("/login");
         return;
       }
+      setCurrentUserId(user.id);
       const profile = await getProfile(user.id);
       if (profile) {
         setNickname(profile.nickname);
+        if (profile.nickname.trim()) setNicknameCheckStatus("available");
         setRegionSi(profile.region_si || "");
         setRegionGu(profile.region_gu || "");
         setRegionDong(profile.region_dong || "");
@@ -206,6 +211,7 @@ export default function OnboardingPage() {
     (score4guStr !== "" && score4gu > 0) || (score3cushionStr !== "" && score3cushion >= 0);
   const canSubmit =
     nickname.trim().length > 0 &&
+    nicknameCheckStatus === "available" &&
     regionSi !== "" &&
     regionGu !== "" &&
     regionDong !== "" &&
@@ -235,7 +241,7 @@ export default function OnboardingPage() {
       regionGu,
       regionDong,
       score4gu: score4guStr && score4gu > 0 ? score4gu : null,
-      score3cushion: score3cushionStr && score3cushion >= 0 ? score3cushion : null,
+      score3cushion: score3cushionStr && score3cushion >= 0 ? Math.round(score3cushion) : null,
       favoriteClubName: favoriteClubName.trim() || null,
       favoriteClubId: favoriteClubName.trim() ? (isManualFavoriteClub ? "MANUAL" : favoriteClubId || null) : null,
       favoriteClubAddress: favoriteClubName.trim() ? (isManualFavoriteClub ? "" : favoriteClubAddress || null) : null,
@@ -271,19 +277,46 @@ export default function OnboardingPage() {
               <User className="h-4 w-4 text-[#1fe85b]" />
               닉네임
             </label>
-            <input
-              id="nickname"
-              type="text"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="예: 당구천재"
-              maxLength={20}
-              className="h-14 w-full rounded-xl border border-white/10 bg-[#1a1a1a] px-4 text-[16px] text-white placeholder:text-white/40 focus:border-[#1fe85b] focus:outline-none focus:ring-1 focus:ring-[#1fe85b]"
-              autoComplete="nickname"
-            />
-            <p className="mt-1.5 text-[12px] text-white/50">
-              다른 사용자에게 보여질 이름입니다
-            </p>
+            <div className="flex gap-2">
+              <input
+                id="nickname"
+                type="text"
+                value={nickname}
+                onChange={(e) => {
+                  setNickname(e.target.value);
+                  setNicknameCheckStatus("idle");
+                }}
+                placeholder="예: 당구천재"
+                maxLength={20}
+                className="h-14 flex-1 rounded-xl border border-white/10 bg-[#1a1a1a] px-4 text-[16px] text-white placeholder:text-white/40 focus:border-[#1fe85b] focus:outline-none focus:ring-1 focus:ring-[#1fe85b]"
+                autoComplete="nickname"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const trimmed = nickname.trim();
+                  if (!trimmed) return;
+                  setNicknameCheckStatus("checking");
+                  const { duplicate } = await checkNicknameDuplicate(trimmed, currentUserId ?? undefined);
+                  setNicknameCheckStatus(duplicate ? "duplicate" : "available");
+                }}
+                disabled={!nickname.trim() || nicknameCheckStatus === "checking"}
+                className="h-14 shrink-0 rounded-xl border border-white/10 bg-[#1a1a1a] px-4 text-[13px] font-semibold text-white/90 transition-opacity hover:bg-white/5 disabled:opacity-50"
+              >
+                {nicknameCheckStatus === "checking" ? "확인 중" : "중복 확인"}
+              </button>
+            </div>
+            {nicknameCheckStatus === "available" && (
+              <p className="mt-1.5 text-[12px] font-medium text-[#1fe85b]">사용 가능한 닉네임입니다</p>
+            )}
+            {nicknameCheckStatus === "duplicate" && (
+              <p className="mt-1.5 text-[12px] font-medium text-red-400">이미 사용 중인 닉네임입니다</p>
+            )}
+            {nicknameCheckStatus === "idle" && (
+              <p className="mt-1.5 text-[12px] text-white/50">
+                다른 사용자에게 보여질 이름입니다. 중복 확인이 필요합니다
+              </p>
+            )}
           </div>
 
           {/* 활동 지역 - 시/구/동 */}
@@ -383,6 +416,11 @@ export default function OnboardingPage() {
                       <div className="flex items-center justify-center gap-2 px-4 py-6 text-[14px] text-white/60">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         검색 중...
+                      </div>
+                    )}
+                    {!clubSearchLoading && !clubSearchQuery.trim() && (
+                      <div className="px-4 py-6 text-center text-[14px] text-white/50">
+                        당구장 이름을 입력하세요
                       </div>
                     )}
                     {!clubSearchLoading && clubSearchQuery.trim() && clubSearchResults.length === 0 && (
@@ -495,9 +533,9 @@ export default function OnboardingPage() {
                   inputMode="numeric"
                   value={score3cushionStr}
                   onChange={(e) => setScore3cushionStr(e.target.value)}
-                  placeholder="예: 0.5"
+                  placeholder="예: 17"
                   min={0}
-                  step={0.1}
+                  step={1}
                   className={`h-12 w-full rounded-xl border px-4 text-[16px] text-white placeholder:text-white/40 focus:outline-none focus:ring-1 ${
                     score3cushionValid
                       ? "border-white/10 bg-[#1a1a1a] focus:border-[#1fe85b] focus:ring-[#1fe85b]"
@@ -513,7 +551,7 @@ export default function OnboardingPage() {
               <p className="mt-1 text-[12px] text-red-400">{SCORE_3CUSHION_ALERT}</p>
             )}
             <p className="mt-1.5 text-[12px] text-white/50">
-              4구: 10점 단위 / 3쿠션: 평균 점 (소수 가능) · 하나 이상 입력
+              4구: 10점 단위 / 3쿠션: 목표 점수 (1점 단위, 예: 17, 21) · 하나 이상 입력
             </p>
           </div>
 
