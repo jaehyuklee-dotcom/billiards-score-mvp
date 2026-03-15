@@ -104,7 +104,7 @@ export async function upsertProfile(
       region_si: params.regionSi,
       region_gu: params.regionGu,
       region_dong: params.regionDong,
-      score: params.score4gu ?? 0,
+      score: params.score4gu != null && params.score4gu >= 0 ? params.score4gu : 0,
       score_4gu: params.score4gu,
       score_3cushion: params.score3cushion,
       favorite_club_name: params.favoriteClubName,
