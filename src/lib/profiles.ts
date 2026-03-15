@@ -8,7 +8,11 @@ export type Profile = {
   region_si: string;
   region_gu: string;
   region_dong: string;
-  score: number;
+  score_4gu: number | null;
+  score_3cushion: number | null;
+  favorite_club_name: string | null;
+  favorite_club_id: string | null;
+  favorite_club_address: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -38,6 +42,14 @@ export async function getProfile(userId: string): Promise<Profile | null> {
       region_dong: "",
     } as Profile;
   }
+  // 기존 score 컬럼 마이그레이션
+  if (p.score != null && p.score_4gu == null && p.score_3cushion == null) {
+    return {
+      ...(p as Profile),
+      score_4gu: Number(p.score) || null,
+      score_3cushion: null,
+    } as Profile;
+  }
   return p as Profile;
 }
 
@@ -47,7 +59,11 @@ export type UpsertProfileParams = {
   regionSi: string;
   regionGu: string;
   regionDong: string;
-  score: number;
+  score4gu: number | null;
+  score3cushion: number | null;
+  favoriteClubName: string | null;
+  favoriteClubId: string | null;
+  favoriteClubAddress: string | null;
 };
 
 export async function upsertProfile(
@@ -61,7 +77,11 @@ export async function upsertProfile(
       region_si: params.regionSi,
       region_gu: params.regionGu,
       region_dong: params.regionDong,
-      score: params.score,
+      score_4gu: params.score4gu,
+      score_3cushion: params.score3cushion,
+      favorite_club_name: params.favoriteClubName,
+      favorite_club_id: params.favoriteClubId,
+      favorite_club_address: params.favoriteClubAddress,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" }

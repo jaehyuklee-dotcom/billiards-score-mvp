@@ -57,7 +57,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=여기에_anon_키_붙여넣기
 
 ## 7. profiles 테이블 - 온보딩(프로필) 정보
 
-온보딩 페이지에서 수집한 닉네임, 활동 지역(시/구/동), 당구 점수를 저장합니다.
+온보딩 페이지에서 수집한 닉네임, 활동 지역(시/구/동), 4구/3쿠션 점수를 저장합니다.
 
 ```sql
 -- profiles 테이블 생성 (신규)
@@ -68,11 +68,25 @@ CREATE TABLE IF NOT EXISTS profiles (
   region_si TEXT NOT NULL,
   region_gu TEXT NOT NULL,
   region_dong TEXT NOT NULL,
-  score INTEGER NOT NULL CHECK (score > 0 AND score % 10 = 0),
+  score_4gu INTEGER CHECK (score_4gu IS NULL OR (score_4gu >= 0 AND score_4gu % 10 = 0)),
+  score_3cushion REAL CHECK (score_3cushion IS NULL OR score_3cushion >= 0),
+  favorite_club_name TEXT,
+  favorite_club_id TEXT,
+  favorite_club_address TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id)
 );
+
+-- [기존 score 컬럼 사용 중이면] 아래 마이그레이션 실행:
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS score_4gu INTEGER;
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS score_3cushion REAL;
+-- UPDATE profiles SET score_4gu = score, score_3cushion = NULL WHERE score IS NOT NULL AND score_4gu IS NULL;
+
+-- [단골 당구장 컬럼 추가]
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS favorite_club_name TEXT;
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS favorite_club_id TEXT;
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS favorite_club_address TEXT;
 
 -- [기존 profiles 테이블에 region 컬럼만 있는 경우] 아래 마이그레이션 실행:
 -- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS region_si TEXT DEFAULT '';
@@ -102,9 +116,11 @@ CREATE POLICY "Users can update own profile"
 
 ```sql
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS rankings JSONB;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS club_name TEXT;
 ```
 
-형식: `[{ "playerIndex": 0, "rank": 1, "name": "이름", "score": 400 }, ...]`
+rankings 형식: `[{ "playerIndex": 0, "rank": 1, "name": "이름", "score": 400 }, ...]`
+club_name: 경기 당구장 이름 (선택)
 
 ## 9. Vercel 배포 시
 

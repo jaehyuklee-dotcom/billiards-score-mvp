@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronDown, User, MapPin, Target } from "lucide-react";
+import { ChevronDown, Loader2, MapPin, Target, User } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getProfile,
@@ -12,11 +12,22 @@ import {
   upsertProfile,
 } from "@/lib/profiles";
 
-const SCORE_ALERT_MSG =
-  "당구 점수는 10단위로만 입력 가능합니다. (예: 120, 150, 200)";
+const SCORE_4GU_ALERT = "4구 점수는 10단위로만 입력 가능합니다. (예: 120, 150, 200)";
+const SCORE_3CUSHION_ALERT = "3쿠션 평균 점을 입력해 주세요 (예: 0.5, 1.2)";
 
-function isValidScore10(val: number): boolean {
-  return Number.isFinite(val) && val > 0 && val % 10 === 0;
+type KakaoPlace = {
+  id: string;
+  place_name: string;
+  address_name: string;
+  road_address_name: string | null;
+};
+
+function isValidScore4gu(val: number): boolean {
+  return Number.isFinite(val) && (val === 0 || (val > 0 && val % 10 === 0));
+}
+
+function isValidScore3cushion(val: number): boolean {
+  return Number.isFinite(val) && val >= 0;
 }
 
 function SelectWrapper({
@@ -80,7 +91,16 @@ export default function OnboardingPage() {
   const [regionSi, setRegionSi] = useState("");
   const [regionGu, setRegionGu] = useState("");
   const [regionDong, setRegionDong] = useState("");
-  const [scoreStr, setScoreStr] = useState("");
+  const [score4guStr, setScore4guStr] = useState("");
+  const [score3cushionStr, setScore3cushionStr] = useState("");
+  const [favoriteClubName, setFavoriteClubName] = useState("");
+  const [favoriteClubId, setFavoriteClubId] = useState("");
+  const [favoriteClubAddress, setFavoriteClubAddress] = useState("");
+  const [isManualFavoriteClub, setIsManualFavoriteClub] = useState(false);
+  const [clubSearchQuery, setClubSearchQuery] = useState("");
+  const [clubSearchResults, setClubSearchResults] = useState<KakaoPlace[]>([]);
+  const [clubSearchLoading, setClubSearchLoading] = useState(false);
+  const [clubSearchOpen, setClubSearchOpen] = useState(false);
   const [openSi, setOpenSi] = useState(false);
   const [openGu, setOpenGu] = useState(false);
   const [openDong, setOpenDong] = useState(false);
@@ -89,8 +109,42 @@ export default function OnboardingPage() {
   const siRef = useRef<HTMLDivElement>(null);
   const guRef = useRef<HTMLDivElement>(null);
   const dongRef = useRef<HTMLDivElement>(null);
+  const clubSearchRef = useRef<HTMLDivElement>(null);
 
   const guOptions = regionSi ? getRegionGu(regionSi) : [];
+
+  // 단골 당구장 검색 (debounced)
+  const searchClubs = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setClubSearchResults([]);
+      return;
+    }
+    setClubSearchLoading(true);
+    try {
+      const res = await fetch(`/api/kakao/search?query=${encodeURIComponent(query.trim())}`);
+      const data = (await res.json()) as KakaoPlace[] | { error: string };
+      if (Array.isArray(data)) {
+        setClubSearchResults(data);
+      } else {
+        setClubSearchResults([]);
+      }
+    } catch {
+      setClubSearchResults([]);
+    } finally {
+      setClubSearchLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (clubSearchQuery.trim()) {
+        searchClubs(clubSearchQuery);
+      } else {
+        setClubSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [clubSearchQuery, searchClubs]);
   const dongOptions = regionSi && regionGu ? getRegionDong(regionSi, regionGu) : [];
 
   // 로그인 체크 및 기존 프로필 데이터 로드
@@ -109,7 +163,14 @@ export default function OnboardingPage() {
         setRegionSi(profile.region_si || "");
         setRegionGu(profile.region_gu || "");
         setRegionDong(profile.region_dong || "");
-        setScoreStr(String(profile.score));
+        setScore4guStr(profile.score_4gu != null ? String(profile.score_4gu) : "");
+        setScore3cushionStr(profile.score_3cushion != null ? String(profile.score_3cushion) : "");
+        setFavoriteClubName(profile.favorite_club_name || "");
+        setFavoriteClubId(profile.favorite_club_id || "");
+        setFavoriteClubAddress(profile.favorite_club_address || "");
+        if (profile.favorite_club_id === "MANUAL" && profile.favorite_club_name) {
+          setIsManualFavoriteClub(true);
+        }
       }
     }
     load();
@@ -121,6 +182,7 @@ export default function OnboardingPage() {
       if (siRef.current && !siRef.current.contains(t)) setOpenSi(false);
       if (guRef.current && !guRef.current.contains(t)) setOpenGu(false);
       if (dongRef.current && !dongRef.current.contains(t)) setOpenDong(false);
+      if (clubSearchRef.current && !clubSearchRef.current.contains(t)) setClubSearchOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -136,15 +198,20 @@ export default function OnboardingPage() {
     setRegionDong("");
   };
 
-  const score = Number(scoreStr);
-  const scoreValid = scoreStr === "" || isValidScore10(score);
+  const score4gu = Number(score4guStr);
+  const score3cushion = Number(score3cushionStr);
+  const score4guValid = score4guStr === "" || isValidScore4gu(score4gu);
+  const score3cushionValid = score3cushionStr === "" || isValidScore3cushion(score3cushion);
+  const atLeastOneScore =
+    (score4guStr !== "" && score4gu > 0) || (score3cushionStr !== "" && score3cushion >= 0);
   const canSubmit =
     nickname.trim().length > 0 &&
     regionSi !== "" &&
     regionGu !== "" &&
     regionDong !== "" &&
-    scoreValid &&
-    score > 0 &&
+    score4guValid &&
+    score3cushionValid &&
+    atLeastOneScore &&
     !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -167,7 +234,11 @@ export default function OnboardingPage() {
       regionSi,
       regionGu,
       regionDong,
-      score,
+      score4gu: score4guStr && score4gu > 0 ? score4gu : null,
+      score3cushion: score3cushionStr && score3cushion >= 0 ? score3cushion : null,
+      favoriteClubName: favoriteClubName.trim() || null,
+      favoriteClubId: favoriteClubName.trim() ? (isManualFavoriteClub ? "MANUAL" : favoriteClubId || null) : null,
+      favoriteClubAddress: favoriteClubName.trim() ? (isManualFavoriteClub ? "" : favoriteClubAddress || null) : null,
     });
 
     setSubmitting(false);
@@ -257,35 +328,192 @@ export default function OnboardingPage() {
             </p>
           </div>
 
-          {/* 당구 점수 */}
+          {/* 나의 단골 당구장 */}
+          <div ref={clubSearchRef}>
+            <label className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-white/90">
+              <MapPin className="h-4 w-4 text-[#1fe85b]" />
+              나의 단골 당구장
+            </label>
+            {isManualFavoriteClub ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={favoriteClubName}
+                  onChange={(e) => setFavoriteClubName(e.target.value)}
+                  placeholder="예: 역삼동 황금당구장"
+                  className="h-14 w-full rounded-xl border border-white/10 bg-[#1a1a1a] px-4 text-[16px] text-white placeholder:text-white/40 focus:border-[#1fe85b] focus:outline-none focus:ring-1 focus:ring-[#1fe85b]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsManualFavoriteClub(false);
+                    setFavoriteClubName("");
+                    setFavoriteClubId("");
+                    setFavoriteClubAddress("");
+                    setClubSearchQuery("");
+                  }}
+                  className="text-[12px] font-medium text-white/60 underline hover:text-[#1fe85b]"
+                >
+                  검색으로 다시 찾기
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={clubSearchOpen ? clubSearchQuery : (favoriteClubId ? favoriteClubName : clubSearchQuery)}
+                    onChange={(e) => {
+                      setClubSearchQuery(e.target.value);
+                      setClubSearchOpen(true);
+                      if (!e.target.value) {
+                        setFavoriteClubName("");
+                        setFavoriteClubId("");
+                        setFavoriteClubAddress("");
+                      }
+                    }}
+                    onFocus={() => setClubSearchOpen(true)}
+                    placeholder="지역명 또는 당구장 이름 검색"
+                    className="h-14 flex-1 rounded-xl border border-white/10 bg-[#1a1a1a] px-4 text-[16px] text-white placeholder:text-white/40 focus:border-[#1fe85b] focus:outline-none focus:ring-1 focus:ring-[#1fe85b]"
+                  />
+                </div>
+                {clubSearchOpen && (
+                  <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a1a] shadow-xl">
+                    {clubSearchLoading && (
+                      <div className="flex items-center justify-center gap-2 px-4 py-6 text-[14px] text-white/60">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        검색 중...
+                      </div>
+                    )}
+                    {!clubSearchLoading && clubSearchQuery.trim() && clubSearchResults.length === 0 && (
+                      <div className="px-4 py-6 text-center text-[14px] text-white/50">
+                        검색 결과가 없습니다
+                      </div>
+                    )}
+                    {!clubSearchLoading && clubSearchResults.length > 0 && (
+                      <div className="py-1">
+                        {clubSearchResults.map((place) => (
+                          <button
+                            key={place.id}
+                            type="button"
+                            onClick={() => {
+                              setFavoriteClubName(place.place_name);
+                              setFavoriteClubId(place.id);
+                              setFavoriteClubAddress(place.road_address_name || place.address_name);
+                              setClubSearchQuery("");
+                              setClubSearchOpen(false);
+                            }}
+                            className="flex w-full flex-col items-start gap-0.5 px-4 py-3 text-left hover:bg-white/5"
+                          >
+                            <span className="text-[14px] font-medium text-white">{place.place_name}</span>
+                            <span className="text-[12px] text-white/60">
+                              {place.road_address_name || place.address_name}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {!clubSearchLoading && clubSearchQuery.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsManualFavoriteClub(true);
+                          setFavoriteClubName(clubSearchQuery);
+                          setFavoriteClubId("MANUAL");
+                          setFavoriteClubAddress("");
+                          setClubSearchQuery("");
+                          setClubSearchOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 border-t border-white/10 px-4 py-3 text-[14px] font-medium text-[#1fe85b] hover:bg-white/5"
+                      >
+                        직접 입력: &quot;{clubSearchQuery}&quot; 당구장
+                      </button>
+                    )}
+                  </div>
+                )}
+                {favoriteClubName && favoriteClubId && !clubSearchOpen && (
+                  <p className="mt-1.5 text-[12px] text-[#1fe85b]">
+                    ✓ {favoriteClubName}
+                    {favoriteClubAddress && ` · ${favoriteClubAddress}`}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsManualFavoriteClub(true);
+                    setFavoriteClubName("");
+                    setFavoriteClubId("");
+                    setFavoriteClubAddress("");
+                    setClubSearchQuery("");
+                    setClubSearchOpen(false);
+                  }}
+                  className="mt-2 text-[12px] font-medium text-white/60 underline hover:text-[#1fe85b]"
+                >
+                  직접 입력하기 (예: OO동 OO당구장)
+                </button>
+              </div>
+            )}
+            <p className="mt-1.5 text-[12px] text-white/50">
+              단골 당구장을 검색하거나 직접 입력할 수 있습니다
+            </p>
+          </div>
+
+          {/* 당구 점수 - 4구 / 3쿠션 */}
           <div>
-            <label
-              htmlFor="score"
-              className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-white/90"
-            >
+            <label className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-white/90">
               <Target className="h-4 w-4 text-[#1fe85b]" />
               현재 당구 점수
             </label>
-            <input
-              id="score"
-              type="number"
-              inputMode="numeric"
-              value={scoreStr}
-              onChange={(e) => setScoreStr(e.target.value)}
-              placeholder="예: 150"
-              min={10}
-              step={10}
-              className={`h-14 w-full rounded-xl border px-4 text-[16px] text-white placeholder:text-white/40 focus:outline-none focus:ring-1 ${
-                scoreValid
-                  ? "border-white/10 bg-[#1a1a1a] focus:border-[#1fe85b] focus:ring-[#1fe85b]"
-                  : "border-red-500/50 bg-[#1a1a1a] focus:border-red-500 focus:ring-red-500"
-              }`}
-            />
-            {!scoreValid && scoreStr !== "" && (
-              <p className="mt-1.5 text-[12px] text-red-400">{SCORE_ALERT_MSG}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="score-4gu" className="mb-1.5 block text-[12px] font-medium text-white/70">
+                  4구
+                </label>
+                <input
+                  id="score-4gu"
+                  type="number"
+                  inputMode="numeric"
+                  value={score4guStr}
+                  onChange={(e) => setScore4guStr(e.target.value)}
+                  placeholder="예: 150"
+                  min={0}
+                  step={10}
+                  className={`h-12 w-full rounded-xl border px-4 text-[16px] text-white placeholder:text-white/40 focus:outline-none focus:ring-1 ${
+                    score4guValid
+                      ? "border-white/10 bg-[#1a1a1a] focus:border-[#1fe85b] focus:ring-[#1fe85b]"
+                      : "border-red-500/50 bg-[#1a1a1a] focus:border-red-500 focus:ring-red-500"
+                  }`}
+                />
+              </div>
+              <div>
+                <label htmlFor="score-3cushion" className="mb-1.5 block text-[12px] font-medium text-white/70">
+                  3쿠션
+                </label>
+                <input
+                  id="score-3cushion"
+                  type="number"
+                  inputMode="numeric"
+                  value={score3cushionStr}
+                  onChange={(e) => setScore3cushionStr(e.target.value)}
+                  placeholder="예: 0.5"
+                  min={0}
+                  step={0.1}
+                  className={`h-12 w-full rounded-xl border px-4 text-[16px] text-white placeholder:text-white/40 focus:outline-none focus:ring-1 ${
+                    score3cushionValid
+                      ? "border-white/10 bg-[#1a1a1a] focus:border-[#1fe85b] focus:ring-[#1fe85b]"
+                      : "border-red-500/50 bg-[#1a1a1a] focus:border-red-500 focus:ring-red-500"
+                  }`}
+                />
+              </div>
+            </div>
+            {!score4guValid && score4guStr !== "" && (
+              <p className="mt-1.5 text-[12px] text-red-400">{SCORE_4GU_ALERT}</p>
+            )}
+            {!score3cushionValid && score3cushionStr !== "" && (
+              <p className="mt-1 text-[12px] text-red-400">{SCORE_3CUSHION_ALERT}</p>
             )}
             <p className="mt-1.5 text-[12px] text-white/50">
-              4구 기준, 10점 단위로 입력해 주세요
+              4구: 10점 단위 / 3쿠션: 평균 점 (소수 가능) · 하나 이상 입력
             </p>
           </div>
 
@@ -303,7 +531,7 @@ export default function OnboardingPage() {
             >
               {submitting
                 ? "저장 중..."
-                : nickname || regionSi || scoreStr
+                : nickname || regionSi || score4guStr || score3cushionStr
                   ? "저장하기"
                   : "시작하기"}
             </button>
