@@ -1,37 +1,23 @@
 import { createClient } from "@/lib/supabase/client";
+import { REGION_HIERARCHY, REGION_SI, getRegionGu, getRegionDong } from "./region-data";
 
 export type Profile = {
   id: string;
   user_id: string;
   nickname: string;
-  region: string;
+  region_si: string;
+  region_gu: string;
+  region_dong: string;
   score: number;
   created_at: string;
   updated_at: string;
 };
 
-export const REGIONS = [
-  "서울",
-  "경기",
-  "인천",
-  "부산",
-  "대구",
-  "광주",
-  "대전",
-  "울산",
-  "세종",
-  "강원",
-  "충북",
-  "충남",
-  "전북",
-  "전남",
-  "경북",
-  "경남",
-  "제주",
-  "기타",
-] as const;
+/** @deprecated 기존 region 컬럼 호환용 - 신규는 region_si/gu/dong 사용 */
+export type ProfileLegacy = Profile & { region?: string };
 
-export type Region = (typeof REGIONS)[number];
+export const REGION_SI_LIST = REGION_SI;
+export { getRegionGu, getRegionDong, REGION_HIERARCHY };
 
 export async function getProfile(userId: string): Promise<Profile | null> {
   const supabase = createClient();
@@ -42,13 +28,25 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     .single();
 
   if (error || !data) return null;
-  return data as Profile;
+  const p = data as Record<string, unknown>;
+  // 기존 region만 있는 레코드 마이그레이션
+  if (p.region && !p.region_si) {
+    return {
+      ...(p as Profile),
+      region_si: String(p.region),
+      region_gu: "",
+      region_dong: "",
+    } as Profile;
+  }
+  return p as Profile;
 }
 
 export type UpsertProfileParams = {
   userId: string;
   nickname: string;
-  region: string;
+  regionSi: string;
+  regionGu: string;
+  regionDong: string;
   score: number;
 };
 
@@ -60,7 +58,9 @@ export async function upsertProfile(
     {
       user_id: params.userId,
       nickname: params.nickname.trim(),
-      region: params.region,
+      region_si: params.regionSi,
+      region_gu: params.regionGu,
+      region_dong: params.regionDong,
       score: params.score,
       updated_at: new Date().toISOString(),
     },

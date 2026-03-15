@@ -57,20 +57,28 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=여기에_anon_키_붙여넣기
 
 ## 7. profiles 테이블 - 온보딩(프로필) 정보
 
-온보딩 페이지에서 수집한 닉네임, 활동 지역, 당구 점수를 저장합니다.
+온보딩 페이지에서 수집한 닉네임, 활동 지역(시/구/동), 당구 점수를 저장합니다.
 
 ```sql
--- profiles 테이블 생성
+-- profiles 테이블 생성 (신규)
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   nickname TEXT NOT NULL,
-  region TEXT NOT NULL,
+  region_si TEXT NOT NULL,
+  region_gu TEXT NOT NULL,
+  region_dong TEXT NOT NULL,
   score INTEGER NOT NULL CHECK (score > 0 AND score % 10 = 0),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id)
 );
+
+-- [기존 profiles 테이블에 region 컬럼만 있는 경우] 아래 마이그레이션 실행:
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS region_si TEXT DEFAULT '';
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS region_gu TEXT DEFAULT '';
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS region_dong TEXT DEFAULT '';
+-- UPDATE profiles SET region_si = COALESCE(region, ''), region_gu = '', region_dong = '' WHERE region_si IS NULL OR region_si = '';
 
 -- RLS 정책: 본인만 읽기/쓰기
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;

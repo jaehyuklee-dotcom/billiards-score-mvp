@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  REGIONS,
   getProfile,
+  getRegionDong,
+  getRegionGu,
+  REGION_SI_LIST,
   upsertProfile,
-  type Region,
 } from "@/lib/profiles";
 
 const SCORE_ALERT_MSG =
@@ -18,16 +19,79 @@ function isValidScore10(val: number): boolean {
   return Number.isFinite(val) && val > 0 && val % 10 === 0;
 }
 
+function SelectWrapper({
+  value,
+  placeholder,
+  open,
+  onToggle,
+  onSelect,
+  options,
+  selectRef,
+  className = "",
+}: {
+  value: string;
+  placeholder: string;
+  open: boolean;
+  onToggle: () => void;
+  onSelect: (v: string) => void;
+  options: string[];
+  selectRef: React.RefObject<HTMLDivElement | null>;
+  className?: string;
+}) {
+  return (
+    <div className="relative" ref={selectRef}>
+        <button
+          type="button"
+          onClick={onToggle}
+          className={`flex h-14 w-full items-center justify-between rounded-xl border border-white/10 bg-[#1a1a1a] px-4 text-left text-[16px] focus:border-[#1fe85b] focus:outline-none focus:ring-1 focus:ring-[#1fe85b] ${className}`}
+        >
+          <span className={value ? "text-white" : "text-white/40"}>
+            {value || placeholder}
+          </span>
+          <ChevronDown
+            className={`h-5 w-5 shrink-0 text-white/60 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+        {open && options.length > 0 && (
+          <div className="absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a1a] py-1 shadow-xl">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => {
+                  onSelect(opt);
+                  onToggle();
+                }}
+                className={`block w-full px-4 py-3 text-left text-[14px] hover:bg-white/5 ${value === opt ? "font-semibold text-[#1fe85b]" : "text-white/90"}`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const supabase = createClient();
   const [nickname, setNickname] = useState("");
-  const [region, setRegion] = useState<Region | "">("");
+  const [regionSi, setRegionSi] = useState("");
+  const [regionGu, setRegionGu] = useState("");
+  const [regionDong, setRegionDong] = useState("");
   const [scoreStr, setScoreStr] = useState("");
-  const [openSelect, setOpenSelect] = useState(false);
+  const [openSi, setOpenSi] = useState(false);
+  const [openGu, setOpenGu] = useState(false);
+  const [openDong, setOpenDong] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const selectRef = useRef<HTMLDivElement>(null);
+  const siRef = useRef<HTMLDivElement>(null);
+  const guRef = useRef<HTMLDivElement>(null);
+  const dongRef = useRef<HTMLDivElement>(null);
+
+  const guOptions = regionSi ? getRegionGu(regionSi) : [];
+  const dongOptions = regionSi && regionGu ? getRegionDong(regionSi, regionGu) : [];
 
   // 로그인 체크 및 기존 프로필 데이터 로드
   useEffect(() => {
@@ -42,7 +106,9 @@ export default function OnboardingPage() {
       const profile = await getProfile(user.id);
       if (profile) {
         setNickname(profile.nickname);
-        setRegion(profile.region as Region);
+        setRegionSi(profile.region_si || "");
+        setRegionGu(profile.region_gu || "");
+        setRegionDong(profile.region_dong || "");
         setScoreStr(String(profile.score));
       }
     }
@@ -51,19 +117,32 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (selectRef.current && !selectRef.current.contains(e.target as Node)) {
-        setOpenSelect(false);
-      }
+      const t = e.target as Node;
+      if (siRef.current && !siRef.current.contains(t)) setOpenSi(false);
+      if (guRef.current && !guRef.current.contains(t)) setOpenGu(false);
+      if (dongRef.current && !dongRef.current.contains(t)) setOpenDong(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleSiSelect = (v: string) => {
+    setRegionSi(v);
+    setRegionGu("");
+    setRegionDong("");
+  };
+  const handleGuSelect = (v: string) => {
+    setRegionGu(v);
+    setRegionDong("");
+  };
+
   const score = Number(scoreStr);
   const scoreValid = scoreStr === "" || isValidScore10(score);
   const canSubmit =
     nickname.trim().length > 0 &&
-    region !== "" &&
+    regionSi !== "" &&
+    regionGu !== "" &&
+    regionDong !== "" &&
     scoreValid &&
     score > 0 &&
     !submitting;
@@ -85,7 +164,9 @@ export default function OnboardingPage() {
     const { error } = await upsertProfile({
       userId: user.id,
       nickname: nickname.trim(),
-      region: region as Region,
+      regionSi,
+      regionGu,
+      regionDong,
       score,
     });
 
@@ -100,7 +181,6 @@ export default function OnboardingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#0b0b0b] text-white">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-6 py-12">
-        {/* 헤더 */}
         <div className="mb-10 text-center">
           <h1 className="text-[26px] font-extrabold leading-tight text-white">
             당신은 어떤 고수인가요?
@@ -135,43 +215,46 @@ export default function OnboardingPage() {
             </p>
           </div>
 
-          {/* 활동 지역 */}
+          {/* 활동 지역 - 시/구/동 */}
           <div>
             <label className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-white/90">
               <MapPin className="h-4 w-4 text-[#1fe85b]" />
               활동 지역
             </label>
-            <div className="relative" ref={selectRef}>
-              <button
-                type="button"
-                onClick={() => setOpenSelect((v) => !v)}
-                className="flex h-14 w-full items-center justify-between rounded-xl border border-white/10 bg-[#1a1a1a] px-4 text-left text-[16px] text-white placeholder:text-white/40 focus:border-[#1fe85b] focus:outline-none focus:ring-1 focus:ring-[#1fe85b]"
-              >
-                <span className={region ? "text-white" : "text-white/40"}>
-                  {region || "지역 선택"}
-                </span>
-                <ChevronDown
-                  className={`h-5 w-5 shrink-0 text-white/60 transition-transform ${openSelect ? "rotate-180" : ""}`}
-                />
-              </button>
-              {openSelect && (
-                <div className="absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a1a] py-1 shadow-xl">
-                  {REGIONS.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        setRegion(r);
-                        setOpenSelect(false);
-                      }}
-                      className={`block w-full px-4 py-3 text-left text-[14px] hover:bg-white/5 ${region === r ? "font-semibold text-[#1fe85b]" : "text-white/90"}`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="grid grid-cols-3 gap-2">
+              <SelectWrapper
+                value={regionSi}
+                placeholder="시·도"
+                open={openSi}
+                onToggle={() => setOpenSi((v) => !v)}
+                onSelect={handleSiSelect}
+                options={REGION_SI_LIST}
+                selectRef={siRef}
+              />
+              <SelectWrapper
+                value={regionGu}
+                placeholder="시·군·구"
+                open={openGu}
+                onToggle={() => setOpenGu((v) => !v)}
+                onSelect={handleGuSelect}
+                options={guOptions}
+                selectRef={guRef}
+                className={!regionSi ? "opacity-60" : ""}
+              />
+              <SelectWrapper
+                value={regionDong}
+                placeholder="동·읍·면"
+                open={openDong}
+                onToggle={() => setOpenDong((v) => !v)}
+                onSelect={setRegionDong}
+                options={dongOptions}
+                selectRef={dongRef}
+                className={!regionGu ? "opacity-60" : ""}
+              />
             </div>
+            <p className="mt-1.5 text-[12px] text-white/50">
+              시·도 → 시·군·구 → 동·읍·면 순으로 선택해 주세요
+            </p>
           </div>
 
           {/* 당구 점수 */}
@@ -216,9 +299,13 @@ export default function OnboardingPage() {
             <button
               type="submit"
               disabled={!canSubmit}
-              className="flex h-14 w-full items-center justify-center rounded-xl bg-[#1fe85b] text-[16px] font-bold text-[#0b0b0b] transition-opacity hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex h-14 w-full items-center justify-center rounded-xl bg-[#1fe85b] text-[16px] font-bold text-[#0b0b0b] transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? "저장 중..." : nickname || region || scoreStr ? "저장하기" : "시작하기"}
+              {submitting
+                ? "저장 중..."
+                : nickname || regionSi || scoreStr
+                  ? "저장하기"
+                  : "시작하기"}
             </button>
           </div>
         </form>
