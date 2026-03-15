@@ -4,7 +4,6 @@ import { ChevronLeft, Play, UserPlus, UserMinus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getProfile } from "@/lib/profiles";
 
 type PlayerSetup = {
   id: number;
@@ -51,7 +50,11 @@ export default function SetupPage() {
         setHasHistory(false);
         return;
       }
-      const profile = await getProfile(user.id);
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("nickname")
+        .eq("user_id", user.id)
+        .single();
       const nickname =
         profile?.nickname?.trim() ||
         user.user_metadata?.full_name ||
