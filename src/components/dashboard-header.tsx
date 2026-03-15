@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { getProfile } from "@/lib/profiles";
 import type { User } from "@supabase/supabase-js";
 import { User as UserIcon } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -17,6 +18,7 @@ function getUserDisplayName(user: User): string {
 
 function DashboardHeaderInner() {
   const [user, setUser] = useState<User | null>(null);
+  const [profileNickname, setProfileNickname] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -29,37 +31,33 @@ function DashboardHeaderInner() {
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        const profile = await getProfile(session.user.id);
+        setProfileNickname(profile?.nickname ?? null);
+      }
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleUserClick = async () => {
-    try {
-      const supabase = createClient();
-      if (user) {
-        await supabase.auth.signOut();
-        router.refresh();
-      } else {
-        const { data } = await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
-          },
-        });
-        if (data?.url) {
-          window.location.href = data.url;
-        }
-      }
-    } catch {
-      alert("Supabase 설정이 필요합니다. .env.local을 확인해 주세요.");
+  useEffect(() => {
+    if (!user) return;
+    getProfile(user.id).then((p) => setProfileNickname(p?.nickname ?? null));
+  }, [user?.id]);
+
+  const displayName = profileNickname ?? (user ? getUserDisplayName(user) : "Jaehyuk");
+
+  const handleUserClick = () => {
+    if (user) {
+      router.push("/onboarding");
+    } else {
+      router.push("/login");
     }
   };
 
-  const displayName = user ? getUserDisplayName(user) : "Jaehyuk";
   const isLoggedIn = !!user;
 
   return (
@@ -76,7 +74,7 @@ function DashboardHeaderInner() {
         type="button"
         onClick={handleUserClick}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#1fe85b]/20 transition-opacity hover:opacity-90"
-        aria-label={isLoggedIn ? "로그아웃" : "구글 로그인"}
+        aria-label={isLoggedIn ? "프로필 수정" : "로그인"}
       >
         <UserIcon className="h-6 w-6 text-[#1fe85b]" aria-hidden="true" />
       </button>

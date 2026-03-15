@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronLeft, Play } from "lucide-react";
+import { ChevronLeft, Play, UserPlus, UserMinus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client"; // 1. Supabase 클라이언트 추가
+import { createClient } from "@/lib/supabase/client";
 
 type PlayerSetup = {
   id: number;
@@ -11,7 +11,7 @@ type PlayerSetup = {
   target: string;
   guest?: boolean;
   finish?: string;
-  userId?: string; // 2. 유저 ID를 담을 공간 추가
+  userId?: string;
 };
 
 const SCORE_ALERT_MSG = "당구 점수는 10단위로만 입력 가능합니다. (예: 120, 150, 200)";
@@ -30,25 +30,40 @@ export default function SetupPage() {
     { id: 2, name: "2번 선수", target: "400", guest: false, finish: "1" },
   ]);
 
-  // --- 추가된 로직: 로그인 유저 확인 및 1번 선수 매칭 ---
-  useEffect(() => {
-    async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setPlayers(prev => prev.map(p => 
-          p.id === 1 
-            ? { ...p, name: user.user_metadata.full_name || user.user_metadata.name || "나", userId: user.id } 
-            : p
-        ));
-      }
-    }
-    getUser();
-  }, []);
-  // --------------------------------------------------
-
   const [p1LoadRecent, setP1LoadRecent] = useState(true);
   const [finishSameForAll, setFinishSameForAll] = useState(true);
+  const [hasHistory, setHasHistory] = useState(false);
   const targetInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // 로그인 유저 정보 불러오기, 1번 선수 매칭, 기록 존재 여부 확인
+  useEffect(() => {
+    async function fetchUserAndHistory() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setHasHistory(false);
+        return;
+      }
+      setPlayers(prev =>
+        prev.map(p =>
+          p.id === 1
+            ? {
+                ...p,
+                name: user.user_metadata.full_name || user.user_metadata.name || "나",
+                userId: user.id,
+              }
+            : p
+        )
+      );
+
+      const { data: matches } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1);
+      setHasHistory((matches?.length ?? 0) > 0);
+    }
+    fetchUserAndHistory();
+  }, []);
 
   const canStart = useMemo(() => {
     if (players.length < 2) return false;
@@ -65,6 +80,7 @@ export default function SetupPage() {
     });
   }, [players]);
 
+  // [복구] 선수 정보 변경 핸들러
   const handlePlayerChange = (index: number, field: "name" | "target" | "finish", value: string) => {
     setPlayers((prev) => {
       if (field === "finish" && index === 0 && finishSameForAll) {
@@ -74,6 +90,7 @@ export default function SetupPage() {
     });
   };
 
+  // [복구] 선수 추가 기능
   const handleAddPlayer = () => {
     setPlayers((prev) => {
       if (prev.length >= 6) return prev;
@@ -86,15 +103,9 @@ export default function SetupPage() {
     });
   };
 
-  const handleGuestToggle = (index: number, checked: boolean) => {
-    setPlayers((prev) => prev.map((p, i) => (i === index ? { ...p, guest: checked } : p)));
-  };
-
-  const showScoreError = (index: number): boolean => {
-    const raw = players[index]?.target;
-    if (raw === "" || raw === undefined) return false;
-    const val = Number(raw);
-    return !isValidScore10(val);
+  // [복구] 선수 삭제 기능
+  const handleRemovePlayer = () => {
+    setPlayers((prev) => (prev.length > 2 ? prev.slice(0, -1) : prev));
   };
 
   const validateAllScores = (): number | null => {
@@ -107,114 +118,120 @@ export default function SetupPage() {
 
   const playerLabelBgClasses = [
     "bg-orange-500", "bg-blue-500", "bg-yellow-500", "bg-purple-500", "bg-pink-500", "bg-teal-500",
-  ] as const;
+  ];
 
   return (
     <div className="min-h-screen bg-[#0b0b0b] text-white">
-      <main className="mx-auto w-full max-w-[420px] px-6 pb-16 pt-10">
+      <main className="mx-auto w-full max-w-[420px] px-6 pb-24 pt-10">
         <header className="space-y-6">
-          <button
-            type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#d9d9d9]/70"
-            onClick={() => router.push("/")}
-          >
-            <ChevronLeft className="h-5 w-5 text-black/60" />
-          </button>
-          <div className="space-y-3">
-            <div className="text-[24px] font-extrabold text-white">경기 세팅</div>
-            <p className="text-[13px] font-medium text-white/70">멤버를 선택하시면 권장 점수가 기본으로 세팅됩니다.</p>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              aria-label="홈으로"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#d9d9d9]/70"
+            >
+              <ChevronLeft className="h-5 w-5 text-black/70" aria-hidden />
+            </button>
+            <h1 className="text-[24px] font-extrabold">경기 세팅</h1>
           </div>
+          
+          {/* 3구 / 4구 선택 */}
           <div className="grid grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => setGameType("3")}
-              className={`h-[74px] rounded-xl text-[26px] font-extrabold ${gameType === "3" ? "bg-[#1fe85b] text-[#0b0b0b]" : "bg-[#1a1a1a] text-white"}`}
-            >3구</button>
-            <button
-              type="button"
-              onClick={() => setGameType("4")}
-              className={`h-[74px] rounded-xl text-[26px] font-extrabold ${gameType === "4" ? "bg-[#1fe85b] text-[#0b0b0b]" : "bg-[#1a1a1a] text-white"}`}
-            >4구</button>
+            {["3", "4"].map((type) => (
+              <button
+                key={type}
+                onClick={() => setGameType(type as "3" | "4")}
+                className={`h-[74px] rounded-xl text-[26px] font-extrabold ${gameType === type ? "bg-[#1fe85b] text-[#0b0b0b]" : "bg-[#1a1a1a] text-white"}`}
+              >
+                {type}구
+              </button>
+            ))}
           </div>
         </header>
 
         <section className="mt-8 space-y-6">
-          {/* 1번 선수 섹션 */}
-          <div className="rounded-2xl border border-[#ff6a3d] bg-[#1a1a1a] px-5 py-5">
-            <div className="flex items-start justify-between">
-              <div className={`rounded-md px-4 py-2 text-[16px] font-extrabold text-white ${playerLabelBgClasses[0]}`}>1번 선수</div>
-              <label className="flex items-center gap-2 pt-1 text-[13px] font-semibold text-white/70">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded-[4px] border border-white/60 bg-neutral-900 accent-white"
-                  checked={p1LoadRecent}
-                  onChange={(e) => setP1LoadRecent(e.target.checked)}
-                />
-                최근 내 기록 불러오기
-              </label>
-            </div>
-            <div className="mt-5 space-y-4">
-              <div className="space-y-2">
-                <div className="text-[14px] font-semibold text-white/60">닉네임</div>
-                <input
-                  value={players[0]?.name ?? ""}
-                  onChange={(e) => handlePlayerChange(0, "name", e.target.value)}
-                  className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold text-white outline-none"
-                />
+          {players.map((player, index) => (
+            <div key={player.id} className={`rounded-2xl border bg-[#1a1a1a] px-5 py-5 ${index === 0 ? "border-[#ff6a3d]" : "border-white/5"}`}>
+              <div className="flex min-h-[40px] items-center justify-between gap-3">
+                <div className={`shrink-0 rounded-md px-4 py-2 text-[16px] font-extrabold text-white ${playerLabelBgClasses[index % 6]}`}>
+                  {player.id}번 선수 {index === 0 && "(나)"}
+                </div>
+                {index === 0 && hasHistory && (
+                  <label className="flex shrink-0 items-center gap-2 text-[13px] font-semibold text-white/70">
+                    <input
+                      type="checkbox"
+                      checked={p1LoadRecent}
+                      onChange={(e) => setP1LoadRecent(e.target.checked)}
+                      className="accent-[#1fe85b]"
+                    />
+                    기록 불러오기
+                  </label>
+                )}
               </div>
-              <div className="space-y-2">
-                <div className="text-[14px] font-semibold text-white/60">점수</div>
-                <input
-                  ref={(el) => { targetInputRefs.current[0] = el; }}
-                  value={players[0]?.target ?? ""}
-                  onChange={(e) => handlePlayerChange(0, "target", e.target.value)}
-                  inputMode="numeric"
-                  className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold text-white outline-none"
-                />
-                {showScoreError(0) && <p className="text-[12px] font-medium text-red-400">10단위 점수만 입력 가능합니다</p>}
-              </div>
-            </div>
-          </div>
 
-          {/* 2번 선수 섹션 */}
-          <div className="rounded-2xl border border-[#3b82f6] bg-[#1a1a1a] px-5 py-5">
-            <div className="flex items-start justify-between">
-              <div className={`rounded-md px-4 py-2 text-[16px] font-extrabold text-white ${playerLabelBgClasses[1]}`}>2번 선수</div>
-              <label className="flex items-center gap-2 pt-1 text-[13px] font-semibold text-white/70">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded-[4px] border border-white/60 bg-neutral-900 accent-white"
-                  checked={!!players[1]?.guest}
-                  onChange={(e) => handleGuestToggle(1, e.target.checked)}
-                />
-                게스트
-              </label>
-            </div>
-            <div className="mt-5 space-y-4">
-              <div className="space-y-2">
-                <div className="text-[14px] font-semibold text-white/60">닉네임</div>
-                <input
-                  value={players[1]?.name ?? ""}
-                  onChange={(e) => handlePlayerChange(1, "name", e.target.value)}
-                  className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold text-white outline-none"
-                />
+              <div className="mt-5 space-y-4">
+                <div className="space-y-2">
+                  <div className="text-[14px] text-white/60">닉네임</div>
+                  <input
+                    value={player.name}
+                    onChange={(e) => handlePlayerChange(index, "name", e.target.value)}
+                    className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold outline-none"
+                  />
+                </div>
+                <div className={`grid gap-4 ${gameType === "3" ? "grid-cols-1" : "grid-cols-2"}`}>
+                  <div className="space-y-2">
+                    <div className="text-[14px] text-white/60">목표 점수</div>
+                    <input
+                      ref={(el) => { targetInputRefs.current[index] = el; }}
+                      value={player.target}
+                      onChange={(e) => handlePlayerChange(index, "target", e.target.value)}
+                      inputMode="numeric"
+                      className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold outline-none"
+                    />
+                  </div>
+                  {gameType === "4" && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[14px] text-white/60">마무리</div>
+                        {index === 0 && (
+                          <label className="flex items-center gap-2 text-[13px] font-semibold text-white/70">
+                            <input
+                              type="checkbox"
+                              checked={finishSameForAll}
+                              onChange={(e) => setFinishSameForAll(e.target.checked)}
+                              className="accent-[#1fe85b]"
+                            />
+                            모든 선수 동일
+                          </label>
+                        )}
+                      </div>
+                      <input
+                        value={player.finish}
+                        onChange={(e) => handlePlayerChange(index, "finish", e.target.value)}
+                        inputMode="numeric"
+                        className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <div className="text-[14px] font-semibold text-white/60">점수</div>
-                <input
-                  ref={(el) => { targetInputRefs.current[1] = el; }}
-                  value={players[1]?.target ?? ""}
-                  onChange={(e) => handlePlayerChange(1, "target", e.target.value)}
-                  inputMode="numeric"
-                  className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold text-white outline-none"
-                />
-                {showScoreError(1) && <p className="text-[12px] font-medium text-red-400">10단위 점수만 입력 가능합니다</p>}
-              </div>
             </div>
+          ))}
+
+          {/* [복구] 선수 추가/삭제 버튼 */}
+          <div className="flex gap-3 mt-4">
+            <button onClick={handleAddPlayer} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-dashed border-white/25 text-white/80">
+              <UserPlus size={18} /> 선수 추가
+            </button>
+            {players.length > 2 && (
+              <button onClick={handleRemovePlayer} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 text-white/50">
+                <UserMinus size={18} /> 선수 삭제
+              </button>
+            )}
           </div>
 
           <button
-            type="button"
             disabled={!canStart}
             onClick={() => {
               const invalidIdx = validateAllScores();
@@ -223,25 +240,22 @@ export default function SetupPage() {
                 targetInputRefs.current[invalidIdx]?.focus();
                 return;
               }
-
-              const cleanedPlayers = players.map((p) => ({
+              const playersToSend = players.map((p) => ({
                 id: p.id,
-                name: p.name.trim(),
-                target: Number(p.target),
-                finish: Number(p.finish ?? 1),
-                userId: p.userId, // 3. URL 파라미터에 userId 포함
+                name: p.name,
+                target: Number(p.target) || 400,
+                finish: Number(p.finish ?? 1) || 1,
+                userId: p.userId,
               }));
-
               const params = new URLSearchParams({
                 g: gameType,
-                players: JSON.stringify(cleanedPlayers),
+                players: JSON.stringify(playersToSend),
               });
               router.push(`/play?${params.toString()}`);
             }}
-            className={`mt-8 flex h-[78px] w-full items-center justify-center gap-4 rounded-2xl text-[26px] font-extrabold ${canStart ? "bg-[#1fe85b] text-[#0b0b0b]" : "bg-[#1fe85b]/50 text-[#0b0b0b]/70"}`}
+            className={`flex h-[78px] w-full items-center justify-center gap-4 rounded-2xl text-[26px] font-extrabold ${canStart ? "bg-[#1fe85b] text-[#0b0b0b]" : "bg-[#1fe85b]/50 text-[#0b0b0b]/70"}`}
           >
-            <Play className="h-7 w-7 text-[#0b0b0b]" />
-            게임 시작
+            <Play className="h-7 w-7" /> 게임 시작
           </button>
         </section>
       </main>

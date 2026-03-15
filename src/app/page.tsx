@@ -2,17 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  BarChart3,
-  CalendarDays,
-  FileText,
-  Home as HomeIcon,
-  Play,
-  Settings,
-  Target,
-  Trophy,
-} from "lucide-react";
+import { BarChart3, CalendarDays, FileText, Play, Target, Trophy } from "lucide-react";
+import { BottomNav } from "@/components/bottom-nav";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { getRecommendedScore } from "@/lib/recommended-score";
 import { createClient } from "@/lib/supabase/client";
 
 export default function Home() {
@@ -20,7 +13,8 @@ export default function Home() {
     average: "0.000",
     winRate: "0",
     weeklyGames: 0,
-    loading: true
+    loading: true,
+    isLoggedIn: false
   });
 
   const supabase = createClient();
@@ -29,7 +23,7 @@ export default function Home() {
     async function fetchStats() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setStats(prev => ({ ...prev, loading: false }));
+        setStats(prev => ({ ...prev, loading: false, isLoggedIn: false }));
         return;
       }
 
@@ -50,14 +44,16 @@ export default function Home() {
         new Date().getTime() - new Date(m.created_at).getTime() < ONE_WEEK_MS
         ).length;
 
+        const avg = totalInnings > 0 ? totalScore / totalInnings : 0;
         setStats({
-          average: (totalScore / (totalInnings || 1)).toFixed(3),
+          average: avg.toFixed(3),
           winRate: ((wins / matches.length) * 100).toFixed(0),
           weeklyGames,
-          loading: false
+          loading: false,
+          isLoggedIn: true
         });
       } else {
-        setStats(prev => ({ ...prev, loading: false }));
+        setStats(prev => ({ ...prev, loading: false, isLoggedIn: true }));
       }
     }
 
@@ -76,22 +72,47 @@ export default function Home() {
               <BarChart3 className="h-6 w-6 text-[#1fe85b]" />
               <h2 className="text-[14px] font-semibold text-white/90">평균 에버리지</h2>
             </div>
-            <div className="mt-5 text-[56px] font-black leading-none tracking-tight text-[#1fe85b]">
-              {stats.loading ? "..." : stats.average}
+            <div className="mt-5 min-h-[56px] text-[56px] font-black leading-none tracking-tight text-[#1fe85b]">
+              {stats.loading ? (
+                "..."
+              ) : !stats.isLoggedIn ? (
+                <span className="block text-[14px] font-medium text-white/70">
+                  로그인 후 확인 가능합니다
+                </span>
+              ) : (
+                stats.average
+              )}
             </div>
             <p className="mt-2 text-[12px] font-medium text-white/50">전체 경기 데이터를 기준으로 실시간 계산됩니다.</p>
           </div>
 
-          {/* 2. 목표 점수 (기본 400점 세팅) */}
+          {/* 2. 권장 점수 (평균 에버리지 × 15 기준) */}
           <div className="w-full rounded-2xl border border-white/5 bg-[#1a1a1a] p-6">
             <div className="flex items-center gap-3">
               <Target className="h-6 w-6 text-[#1fe85b]" />
-              <h2 className="text-[14px] font-semibold text-white/90">나의 목표 점수</h2>
+              <h2 className="text-[14px] font-semibold text-white/90">나의 권장 점수</h2>
             </div>
-            <div className="mt-5 flex items-baseline gap-2">
-              <span className="text-[56px] font-black leading-none tracking-tight text-white">400점</span>
-              <span className="text-[14px] font-medium text-white/50">(4구)</span>
+            <div className="mt-5 flex flex-col gap-1">
+              {!stats.isLoggedIn ? (
+                <span className="text-[14px] font-medium text-white/70">
+                  로그인 후 확인 가능합니다
+                </span>
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[56px] font-black leading-none tracking-tight text-white">
+                    {getRecommendedScore(
+                      stats.loading ? null : Number(stats.average),
+                      stats.loading
+                    )}
+                    점
+                  </span>
+                  <span className="text-[14px] font-medium text-white/50">(4구)</span>
+                </div>
+              )}
             </div>
+            <p className="mt-2 text-[12px] font-medium text-white/50">
+              15이닝 완료 기준, 평균 에버리지 기반 계산
+            </p>
           </div>
 
           {/* 3. 승률 및 게임 수 */}
@@ -101,8 +122,16 @@ export default function Home() {
                 <Trophy className="h-6 w-6 text-[#1fe85b]" />
                 <h2 className="text-[14px] font-semibold text-white/90">승률</h2>
               </div>
-              <div className="mt-5 text-[56px] font-black leading-none tracking-tight text-[#1fe85b]">
-                {stats.loading ? "..." : `${stats.winRate}%`}
+              <div className="mt-5 min-h-[56px] text-[56px] font-black leading-none tracking-tight text-[#1fe85b]">
+                {stats.loading ? (
+                  "..."
+                ) : !stats.isLoggedIn ? (
+                  <span className="block text-[14px] font-medium text-white/70">
+                    로그인 후 확인 가능합니다
+                  </span>
+                ) : (
+                  `${stats.winRate}%`
+                )}
               </div>
             </div>
             <div className="w-full rounded-2xl border border-white/5 bg-[#1a1a1a] p-6">
@@ -110,8 +139,16 @@ export default function Home() {
                 <CalendarDays className="h-6 w-6 text-[#1fe85b]" />
                 <h2 className="text-[14px] font-semibold text-white/90">이번 주 게임</h2>
               </div>
-              <div className="mt-5 text-[56px] font-black leading-none tracking-tight text-[#1fe85b]">
-                {stats.loading ? "..." : stats.weeklyGames}
+              <div className="mt-5 min-h-[56px] text-[56px] font-black leading-none tracking-tight text-[#1fe85b]">
+                {stats.loading ? (
+                  "..."
+                ) : !stats.isLoggedIn ? (
+                  <span className="block text-[14px] font-medium text-white/70">
+                    로그인 후 확인 가능합니다
+                  </span>
+                ) : (
+                  stats.weeklyGames
+                )}
               </div>
             </div>
           </div>
@@ -126,21 +163,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 하단 네비게이션 */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-white/10 bg-[#0b0b0b] py-4">
-        <Link href="/" className="flex flex-col items-center gap-1 text-[#1fe85b]">
-          <HomeIcon className="h-6 w-6" /><span className="text-[12px] font-medium">홈</span>
-        </Link>
-        <Link href="/history" className="flex flex-col items-center gap-1 text-white/70">
-          <FileText className="h-6 w-6" /><span className="text-[12px] font-medium">기록</span>
-        </Link>
-        <Link href="/ranking" className="flex flex-col items-center gap-1 text-white/70">
-          <BarChart3 className="h-6 w-6" /><span className="text-[12px] font-medium">랭킹</span>
-        </Link>
-        <Link href="/setup" className="flex flex-col items-center gap-1 text-white/70">
-          <Settings className="h-6 w-6" /><span className="text-[12px] font-medium">설정</span>
-        </Link>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

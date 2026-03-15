@@ -48,7 +48,57 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=여기에_anon_키_붙여넣기
    - `http://localhost:3000/auth/callback` (개발용)
    - `https://yourdomain.com/auth/callback` (배포용)
 
-## 6. Vercel 배포 시
+## 6. 카카오 OAuth 설정 (선택)
+
+1. [카카오 개발자 콘솔](https://developers.kakao.com/)에서 앱 생성
+2. REST API 키, Kakao Login Client Secret 발급
+3. Supabase 대시보드 → **Authentication** → **Providers** → **Kakao** 활성화 후 입력
+4. Redirect URL: `https://<프로젝트_ref>.supabase.co/auth/v1/callback`
+
+## 7. profiles 테이블 - 온보딩(프로필) 정보
+
+온보딩 페이지에서 수집한 닉네임, 활동 지역, 당구 점수를 저장합니다.
+
+```sql
+-- profiles 테이블 생성
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  nickname TEXT NOT NULL,
+  region TEXT NOT NULL,
+  score INTEGER NOT NULL CHECK (score > 0 AND score % 10 = 0),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id)
+);
+
+-- RLS 정책: 본인만 읽기/쓰기
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own profile"
+  ON profiles FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own profile"
+  ON profiles FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = user_id);
+```
+
+## 8. matches 테이블 - 3인 이상 경기 순위 저장 (선택)
+
+3인 이상 경기 시 순위 정보를 저장하려면 matches 테이블에 `rankings` 컬럼을 추가하세요:
+
+```sql
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS rankings JSONB;
+```
+
+형식: `[{ "playerIndex": 0, "rank": 1, "name": "이름", "score": 400 }, ...]`
+
+## 9. Vercel 배포 시
 
 Vercel 프로젝트 → **Settings** → **Environment Variables**에 `.env.local`과 동일한 변수 추가:
 - `NEXT_PUBLIC_SUPABASE_URL`

@@ -10,14 +10,26 @@ function clampToNonNegative(n: number) {
   return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
 
+type RankEntry = { playerIndex: number; rank: number };
+
 type WinModalProps = {
+  /** 2인: 승자 이름, 3인+: 꼴찌(패자) 이름 */
   winnerName: string;
+  rankEntries?: RankEntry[];
+  players: { name: string }[];
   onResume: () => void;
   onGoHome: () => Promise<void>;
 };
 
-function WinModal({ winnerName, onResume, onGoHome }: WinModalProps) {
+function WinModal({
+  winnerName,
+  rankEntries,
+  players,
+  onResume,
+  onGoHome,
+}: WinModalProps) {
   const [saving, setSaving] = useState(false);
+  const isMultiPlayer = (rankEntries?.length ?? 0) >= 3;
 
   const handleGoHome = async () => {
     setSaving(true);
@@ -30,11 +42,41 @@ function WinModal({ winnerName, onResume, onGoHome }: WinModalProps) {
       <div className="mx-auto flex w-full max-w-[420px] flex-col items-center justify-center px-6 pb-24">
         <Trophy className="h-24 w-24 text-yellow-400" aria-hidden="true" />
 
-        <div className="mt-10 text-center text-[44px] font-extrabold leading-[1.1] text-white">
-          {winnerName}님이
-          <br />
-          승리하셨습니다!
-        </div>
+        {isMultiPlayer ? (
+          <div className="mt-10 w-full space-y-4">
+            <div className="text-center text-[44px] font-extrabold leading-[1.1] text-white">
+              {winnerName}님이
+              <br />
+              패배하셨습니다!
+            </div>
+            <div className="text-center text-[16px] font-semibold text-white/70">
+              순위 (목표 달성 순서)
+            </div>
+            {rankEntries!
+              .slice()
+              .filter((e, i, arr) => arr.findIndex((x) => x.playerIndex === e.playerIndex) === i)
+              .sort((a, b) => a.rank - b.rank)
+              .map(({ playerIndex, rank }) => (
+                <div
+                  key={`${rank}-${playerIndex}`}
+                  className="flex items-center justify-between rounded-xl bg-[#1a1a1a] px-4 py-3"
+                >
+                  <span className="text-[14px] font-bold text-white/70">
+                    {rank}위
+                  </span>
+                  <span className="text-[18px] font-extrabold text-white">
+                    {players[playerIndex]?.name ?? `선수 ${playerIndex + 1}`}
+                  </span>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <div className="mt-10 text-center text-[44px] font-extrabold leading-[1.1] text-white">
+            {winnerName}님이
+            <br />
+            승리하셨습니다!
+          </div>
+        )}
 
         <div className="mt-10 grid w-full grid-cols-2 gap-4">
           <Link
@@ -64,7 +106,6 @@ function WinModal({ winnerName, onResume, onGoHome }: WinModalProps) {
         <p className="mt-6 text-center text-[13px] font-medium text-white/50">
           혹시 실수로 경기 승리 화면으로 오셨다면 돌아가기를 터치해주세요
         </p>
-
         <button
           type="button"
           onClick={onResume}
@@ -83,6 +124,7 @@ type PlayerRuntime = {
   target: number;
   score: number;
   finish: number;
+  userId?: string;
 };
 
 type GameState = {
@@ -90,6 +132,7 @@ type GameState = {
   activeIndex: number;
   innings: number[];
   remainingFinish: number[];
+  completedRanks: RankEntry[];
 };
 
 function PlayContent() {
@@ -109,6 +152,7 @@ function PlayContent() {
         name: string;
         target: number;
         finish?: number;
+        userId?: string;
       }[];
       if (Array.isArray(parsed) && parsed.length >= 2) {
         initialPlayers = parsed.map((p, index) => ({
@@ -120,6 +164,7 @@ function PlayContent() {
             Number.isFinite(p.finish) && (p.finish ?? 0) > 0
               ? Number(p.finish)
               : 1,
+          userId: p.userId,
         }));
       }
     } catch {
@@ -153,6 +198,7 @@ function PlayContent() {
   const [history, setHistory] = useState<GameState[]>([]);
   const [showWinModal, setShowWinModal] = useState(false);
   const [winnerName, setWinnerName] = useState("");
+  const [completedRanks, setCompletedRanks] = useState<RankEntry[]>([]);
 
   const colorBgClasses = [
     "bg-orange-500",
@@ -186,7 +232,29 @@ function PlayContent() {
     activeIndex,
     innings: [...innings],
     remainingFinish: [...remainingFinish],
+    completedRanks: [...completedRanks],
   });
+
+  const isCompleted = (index: number) =>
+    completedRanks.some((e) => e.playerIndex === index);
+
+  const getNextActiveIndex = (from: number): number => {
+    if (players.length <= 2) return (from + 1) % players.length;
+    for (let i = 1; i < players.length; i++) {
+      const next = (from + i) % players.length;
+      if (!isCompleted(next)) return next;
+    }
+    return from;
+  };
+
+  const getNextActiveIndexExcluding = (from: number, exclude: number): number => {
+    if (players.length <= 2) return (from + 1) % players.length;
+    for (let i = 1; i < players.length; i++) {
+      const next = (from + i) % players.length;
+      if (next !== exclude && !isCompleted(next)) return next;
+    }
+    return from;
+  };
 
   const pushHistory = () => {
     setHistory((prev) => [...prev, snapshot()]);
@@ -275,8 +343,31 @@ function PlayContent() {
                           const next = before - 1;
                           copy[index] = next;
                           if (next <= 0) {
-                            setWinnerName(current.name);
-                            setShowWinModal(true);
+                            if (players.length <= 2) {
+                              setWinnerName(current.name);
+                              setShowWinModal(true);
+                            } else {
+                              setCompletedRanks((prev) => {
+                                if (prev.some((e) => e.playerIndex === index)) return prev;
+                                const newRank = prev.length + 1;
+                                const updated = [...prev, { playerIndex: index, rank: newRank }];
+                                const remainingCount = players.length - updated.length;
+                                if (remainingCount === 1) {
+                                  const lastIdx = players.findIndex((_, i) =>
+                                    !updated.some((e) => e.playerIndex === i)
+                                  );
+                                  if (lastIdx >= 0 && !updated.some((e) => e.playerIndex === lastIdx)) {
+                                    updated.push({ playerIndex: lastIdx, rank: players.length });
+                                    setWinnerName(players[lastIdx].name);
+                                  }
+                                  setShowWinModal(true);
+                                }
+                                return updated;
+                              });
+                              setActiveIndex((prev) =>
+                                getNextActiveIndexExcluding(prev, index)
+                              );
+                            }
                           }
                           return copy;
                         });
@@ -338,7 +429,9 @@ function PlayContent() {
           <section className="px-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               {players.map((player, index) => {
-                const isActive = index === activeIndex;
+                const isActive = index === activeIndex && !isCompleted(index);
+                const completed = isCompleted(index);
+                const playerRank = completedRanks.find((e) => e.playerIndex === index)?.rank;
                 const rawInningsValue = innings[index];
                 const inningsValue =
                   typeof rawInningsValue === "number" && Number.isFinite(rawInningsValue)
@@ -357,15 +450,21 @@ function PlayContent() {
                   <div
                     key={player.id}
                     className={[
-                      "rounded-2xl bg-[#1a1a1a] px-4 py-4",
+                      "rounded-2xl bg-[#1a1a1a] px-4 py-4 relative",
                       !isFirstRow ? "mt-2" : "",
+                      completed ? "opacity-60" : "",
                       isActive
                         ? `border border-white/25 ${
                             glowClasses[index] ?? glowClasses[0]
                           }`
-                        : "opacity-40",
+                        : !completed ? "opacity-40" : "",
                     ].join(" ")}
                   >
+                    {completed && (
+                      <div className="absolute right-3 top-3 rounded-md bg-[#1fe85b]/20 px-2 py-1 text-[11px] font-extrabold text-[#1fe85b]">
+                        FINISH {playerRank}위
+                      </div>
+                    )}
                     <div className="space-y-1">
                         <div
                           className={`inline-flex rounded-md px-3 py-1 text-[12px] font-extrabold text-white ${
@@ -400,8 +499,31 @@ function PlayContent() {
                             const next = before - 1;
                             copy[index] = next;
                             if (next <= 0) {
-                              setWinnerName(current.name);
-                              setShowWinModal(true);
+                              if (players.length <= 2) {
+                                setWinnerName(current.name);
+                                setShowWinModal(true);
+                              } else {
+                                setCompletedRanks((prev) => {
+                                  if (prev.some((e) => e.playerIndex === index)) return prev;
+                                  const newRank = prev.length + 1;
+                                  const updated = [...prev, { playerIndex: index, rank: newRank }];
+                                  const remainingCount = players.length - updated.length;
+                                  if (remainingCount === 1) {
+                                    const lastIdx = players.findIndex((_, i) =>
+                                      !updated.some((e) => e.playerIndex === i)
+                                    );
+                                    if (lastIdx >= 0 && !updated.some((e) => e.playerIndex === lastIdx)) {
+                                      updated.push({ playerIndex: lastIdx, rank: players.length });
+                                      setWinnerName(players[lastIdx].name);
+                                    }
+                                    setShowWinModal(true);
+                                  }
+                                  return updated;
+                                });
+                                setActiveIndex((prev) =>
+                                  getNextActiveIndexExcluding(prev, index)
+                                );
+                              }
                             }
                             return copy;
                           });
@@ -464,7 +586,7 @@ function PlayContent() {
           <button
             type="button"
             onClick={() => {
-              const nextIndex = (activeIndex + 1) % players.length;
+              const nextIndex = getNextActiveIndex(activeIndex);
               pushHistory();
               setActiveIndex(nextIndex);
               setInnings((prev) => {
@@ -490,6 +612,7 @@ function PlayContent() {
                   setActiveIndex(last.activeIndex);
                   setInnings([...last.innings]);
                   setRemainingFinish([...last.remainingFinish]);
+                  setCompletedRanks(last.completedRanks ?? []);
                   return prev.slice(0, -1);
                 });
               }}
@@ -536,13 +659,70 @@ function PlayContent() {
       {showWinModal && (
         <WinModal
           winnerName={winnerName}
-          onResume={() => setShowWinModal(false)}
+          rankEntries={players.length >= 3 ? completedRanks : undefined}
+          players={players}
+          onResume={() => {
+            if (history.length > 0) {
+              const last = history[history.length - 1];
+              setPlayers(last.players.map((p) => ({ ...p })));
+              setActiveIndex(last.activeIndex);
+              setInnings([...last.innings]);
+              setRemainingFinish([...last.remainingFinish]);
+              setCompletedRanks(last.completedRanks ?? []);
+              setHistory((prev) => prev.slice(0, -1));
+            }
+            setShowWinModal(false);
+          }}
           onGoHome={async () => {
-            if (players.length >= 2) {
-              const winnerIdx = players.findIndex((p) => p.name === winnerName);
-              const myScore = players[0]?.score ?? 0;
+            if (players.length < 2) {
+              router.push("/");
+              return;
+            }
+
+            const p1UserId = players[0]?.userId;
+            if (!p1UserId) {
+              console.log("게스트 모드에서는 기록이 저장되지 않습니다");
+              router.push("/");
+              return;
+            }
+
+            const myScore = players[0]?.score ?? 0;
+            const myInnings = innings[0] ?? 0;
+
+            if (players.length >= 3 && completedRanks.length > 0) {
+              const myRank =
+                completedRanks.find((e) => e.playerIndex === 0)?.rank ??
+                players.length;
+              const firstPlace = completedRanks.find((e) => e.rank === 1);
+              const refScore =
+                firstPlace !== undefined
+                  ? players[firstPlace.playerIndex]?.score ?? 0
+                  : 0;
+              const uniqueByPlayer = completedRanks.filter(
+                (e, i, arr) => arr.findIndex((x) => x.playerIndex === e.playerIndex) === i
+              );
+              const rankings = uniqueByPlayer
+                .slice()
+                .sort((a, b) => a.rank - b.rank)
+                .map((e) => ({
+                  playerIndex: e.playerIndex,
+                  rank: e.rank,
+                  name: players[e.playerIndex]?.name ?? `선수 ${e.playerIndex + 1}`,
+                  score: players[e.playerIndex]?.score ?? 0,
+                }));
+              const ok = await saveMatch({
+                myScore,
+                opponentScore: 0,
+                innings: myInnings,
+                isWin: myRank === 1,
+                secondPlaceScore: refScore,
+                rankings,
+              });
+              if (ok) router.push("/");
+              else alert("저장에 실패했습니다.");
+            } else {
               const opponentScore = players[1]?.score ?? 0;
-              const myInnings = innings[0] ?? 0;
+              const winnerIdx = players.findIndex((p) => p.name === winnerName);
               const isWin = winnerIdx === 0;
               const ok = await saveMatch({
                 myScore,
@@ -552,8 +732,6 @@ function PlayContent() {
               });
               if (ok) router.push("/");
               else alert("저장에 실패했습니다.");
-            } else {
-              router.push("/");
             }
           }}
         />
