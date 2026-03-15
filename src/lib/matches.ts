@@ -16,11 +16,23 @@ export type SaveMatchParams = {
   secondPlaceScore?: number;
   /** 3인 이상일 때 전체 순위 정보 (목표 달성 순서) */
   rankings?: RankingEntry[];
+  /** 2인전 상대 이름 */
+  opponentName?: string | null;
+  /** 3구 | 4구 */
+  gameType?: "3" | "4";
 };
 
 export async function saveMatch(params: SaveMatchParams): Promise<boolean> {
-  const { myScore, opponentScore, innings, isWin, secondPlaceScore, rankings } =
-    params;
+  const {
+    myScore,
+    opponentScore,
+    innings,
+    isWin,
+    secondPlaceScore,
+    rankings,
+    opponentName,
+    gameType,
+  } = params;
   const supabase = createClient();
 
   const {
@@ -39,6 +51,12 @@ export async function saveMatch(params: SaveMatchParams): Promise<boolean> {
   };
   if (rankings && rankings.length > 0) {
     insertData.rankings = rankings;
+  }
+  if (opponentName != null) {
+    insertData.opponent_name = opponentName;
+  }
+  if (gameType) {
+    insertData.game_type = gameType;
   }
 
   const { error } = await supabase.from("matches").insert(insertData);

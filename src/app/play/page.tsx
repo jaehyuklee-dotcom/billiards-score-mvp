@@ -717,6 +717,7 @@ function PlayContent() {
                 isWin: myRank === 1,
                 secondPlaceScore: refScore,
                 rankings,
+                gameType,
               });
               if (ok) router.push("/");
               else alert("저장에 실패했습니다.");
@@ -729,6 +730,8 @@ function PlayContent() {
                 opponentScore,
                 innings: myInnings,
                 isWin,
+                opponentName: players[1]?.name ?? null,
+                gameType,
               });
               if (ok) router.push("/");
               else alert("저장에 실패했습니다.");
