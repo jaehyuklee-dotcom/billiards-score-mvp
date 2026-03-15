@@ -1,6 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+const SUPABASE_HEADERS = {
+  Accept: "application/json",
+  "Content-Type": "application/json",
+} as const;
+
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -8,6 +13,9 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: {
+        headers: { ...SUPABASE_HEADERS },
+      },
       cookies: {
         getAll() {
           return cookieStore.getAll();
