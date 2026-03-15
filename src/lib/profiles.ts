@@ -92,10 +92,15 @@ export async function upsertProfile(
   params: UpsertProfileParams
 ): Promise<{ error: Error | null }> {
   const supabase = createClient();
+  // region: 기존 NOT NULL 컬럼 호환용 (region_si + region_gu + region_dong 결합)
+  const regionLegacy =
+    [params.regionSi, params.regionGu, params.regionDong].filter(Boolean).join(" ") || "";
+
   const { error } = await supabase.from("profiles").upsert(
     {
       user_id: params.userId,
       nickname: params.nickname.trim(),
+      region: regionLegacy,
       region_si: params.regionSi,
       region_gu: params.regionGu,
       region_dong: params.regionDong,
