@@ -40,6 +40,7 @@ export default function SetupPage() {
   const [p1LoadRecent, setP1LoadRecent] = useState(true);
   const [finishSameForAll, setFinishSameForAll] = useState(true);
   const [hasHistory, setHasHistory] = useState(false);
+  const [isP1LoggedIn, setIsP1LoggedIn] = useState(false);
   const targetInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // 로그인 유저 정보 불러오기, 1번 선수 매칭, 기록 존재 여부 확인
@@ -48,8 +49,13 @@ export default function SetupPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setHasHistory(false);
+        setIsP1LoggedIn(false);
+        setPlayers((prev) =>
+          prev.map((p) => (p.id === 1 ? { ...p, name: "1번 선수", userId: undefined } : p))
+        );
         return;
       }
+      setIsP1LoggedIn(true);
       const { data: profile } = await supabase
         .from("profiles")
         .select("nickname")
@@ -100,6 +106,7 @@ export default function SetupPage() {
   // [복구] 선수 정보 변경 핸들러
   const handlePlayerChange = (index: number, field: "name" | "target" | "finish", value: string) => {
     setPlayers((prev) => {
+      if (field === "name" && index === 0 && isP1LoggedIn) return prev;
       if (field === "finish" && index === 0 && finishSameForAll) {
         return prev.map((p) => ({ ...p, finish: value }));
       }
@@ -191,11 +198,16 @@ export default function SetupPage() {
 
               <div className="mt-5 space-y-4">
                 <div className="space-y-2">
-                  <div className="text-[14px] text-white/60">닉네임</div>
+                  <div className="text-[14px] text-white/60">선수명</div>
                   <input
                     value={player.name}
                     onChange={(e) => handlePlayerChange(index, "name", e.target.value)}
-                    className="h-12 w-full rounded-md bg-black/35 px-4 text-[18px] font-extrabold outline-none"
+                    readOnly={index === 0 && isP1LoggedIn}
+                    className={`h-12 w-full rounded-md px-4 text-[18px] font-extrabold outline-none ${
+                      index === 0 && isP1LoggedIn
+                        ? "bg-white/5 text-white/90 cursor-not-allowed"
+                        : "bg-black/35"
+                    }`}
                   />
                 </div>
                 <div className={`grid gap-4 ${gameType === "3" ? "grid-cols-1" : "grid-cols-2"}`}>
