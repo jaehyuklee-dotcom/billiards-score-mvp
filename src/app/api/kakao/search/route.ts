@@ -103,7 +103,7 @@ export async function GET(request: Request) {
       }
       const errorBody = {
         error: "Kakao API request failed",
-        message: kakaoErrorMsg ?? responseText || `HTTP ${res.status}`,
+        message: kakaoErrorMsg ?? (responseText || `HTTP ${res.status}`),
         kakao_error_message: kakaoErrorMsg,
         kakao_response: kakaoRaw ?? responseText,
         details: {
