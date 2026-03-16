@@ -398,8 +398,9 @@ function PlayContent() {
           </header>
 
           <div className="grid min-h-0 flex-1 grid-cols-[4fr_2fr_4fr]">
-            {/* 좌측(4) / 우측(4): 점수판 */}
-            {[0, 1].map((index) => {
+            {/* 좌측(4): 1번 선수 점수판 - 본인 턴일 때만 터치로 득점 */}
+            {(() => {
+              const index = 0;
               const player = players[index];
               const isActive = index === activeIndex;
               const rawInningsValue = innings[index];
@@ -414,41 +415,26 @@ function PlayContent() {
               const remainingScore = Math.max(0, player.target - player.score);
               const remainingFinishCount = remainingFinish[index] ?? 0;
               const isCushion = player.score >= player.target;
-              const borderActive =
-                index === 0
-                  ? "border-l-4 border-l-orange-500 shadow-[0_0_24px_rgba(249,115,22,0.4)]"
-                  : "border-r-4 border-r-blue-500 shadow-[0_0_24px_rgba(59,130,246,0.4)]";
-
               return (
                 <div
                   key={player.id}
                   className={[
-                    "flex flex-col bg-zinc-900",
-                    index === 1 && "border-l border-white/5",
+                    "flex flex-col border-r border-white/5 bg-zinc-900",
                     isActive
-                      ? `ring-2 ring-inset ring-[#1fe85b]/50 transition-shadow duration-300 ${borderActive}`
+                      ? "ring-2 ring-inset ring-[#1fe85b]/50 border-l-4 border-l-orange-500 shadow-[0_0_24px_rgba(249,115,22,0.4)] transition-shadow duration-300"
                       : "opacity-50",
                   ].join(" ")}
                 >
                   <div className="flex shrink-0 flex-col gap-0.5 px-3 py-1.5">
-                    <div
-                      className={[
-                        "inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-extrabold text-white",
-                        colorBgClasses[index],
-                      ].join(" ")}
-                    >
-                      {index + 1}번
+                    <div className="inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-extrabold text-white bg-orange-500">
+                      1번
                     </div>
-                    <div className="truncate text-[13px] font-bold text-white/90">
-                      {player.name}
-                    </div>
+                    <div className="truncate text-[13px] font-bold text-white/90">{player.name}</div>
                     <div className="text-[10px] text-white/50">
                       목표 {player.target} ({remainingScore}/{remainingFinishCount})
                     </div>
                   </div>
-
-                  {/* 점수 + 득점 버튼 (숫자/쿠션 + +버튼) */}
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4">
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
                     <button
                       type="button"
                       onClick={() => handleScoreAdd(index)}
@@ -459,30 +445,26 @@ function PlayContent() {
                           ? "cursor-pointer active:scale-95 active:bg-white/5"
                           : "cursor-default pointer-events-none",
                       ].join(" ")}
-                      aria-label={`${index + 1}번 선수 득점`}
+                      aria-label="1번 선수 득점"
                     >
                       {isCushion ? (
                         <span className="text-[clamp(2.5rem,15vmin,7rem)] font-black leading-none text-[#1fe85b]">
                           쿠션
                         </span>
                       ) : (
-                        <span
-                          className={[
-                            "text-[clamp(4rem,35vmin,10rem)] font-black leading-none tracking-tight",
-                            colorTextClasses[index],
-                          ].join(" ")}
-                        >
-                          {player.score}
-                        </span>
-                      )}
-                      {isActive && !isCushion && (
-                        <span className="flex items-center gap-1 text-[14px] font-bold text-[#1fe85b]">
-                          <Plus className="h-5 w-5" /> 득점
-                        </span>
+                        <>
+                          <span className="text-[clamp(4rem,35vmin,10rem)] font-black leading-none tracking-tight text-orange-500">
+                            {player.score}
+                          </span>
+                          {isActive && (
+                            <span className="flex items-center gap-1 text-[14px] font-bold text-[#1fe85b]">
+                              <Plus className="h-5 w-5" /> 터치하여 득점
+                            </span>
+                          )}
+                        </>
                       )}
                     </button>
                   </div>
-
                   <div className="flex shrink-0 items-center justify-between border-t border-white/5 px-3 py-1 text-[11px]">
                     <span className="font-semibold text-white/60">이닝 {inningsValue}</span>
                     <span className="font-bold text-[#1fe85b]">
@@ -491,12 +473,12 @@ function PlayContent() {
                   </div>
                 </div>
               );
-            })}
+            })()}
 
-            {/* 중앙(2): 컨트롤 바 - 세로 꽉 채움 */}
+            {/* 중앙(2): 컨트롤 바 - 턴 넘기기, 되돌리기, -10, 게임 종료 */}
             <div
               className={[
-                "flex flex-col justify-center gap-2 border-x border-white/10 px-3 py-4 transition-colors duration-300",
+                "flex flex-col justify-evenly border-x border-white/10 px-3 py-4 transition-colors duration-300",
                 activeIndex === 0
                   ? "bg-orange-950/30"
                   : "bg-blue-950/30",
@@ -543,6 +525,83 @@ function PlayContent() {
                 게임 종료
               </button>
             </div>
+
+            {/* 우측(4): 2번 선수 점수판 - 본인 턴일 때만 터치로 득점 */}
+            {(() => {
+              const index = 1;
+              const player = players[index];
+              const isActive = index === activeIndex;
+              const rawInningsValue = innings[index];
+              const inningsValue =
+                typeof rawInningsValue === "number" && Number.isFinite(rawInningsValue)
+                  ? rawInningsValue
+                  : 0;
+              const avg =
+                inningsValue > 0 && Number.isFinite(player.score)
+                  ? player.score / delta / inningsValue
+                  : 0;
+              const remainingScore = Math.max(0, player.target - player.score);
+              const remainingFinishCount = remainingFinish[index] ?? 0;
+              const isCushion = player.score >= player.target;
+              return (
+                <div
+                  key={player.id}
+                  className={[
+                    "flex flex-col border-l border-white/5 bg-zinc-900",
+                    isActive
+                      ? "ring-2 ring-inset ring-[#1fe85b]/50 border-r-4 border-r-blue-500 shadow-[0_0_24px_rgba(59,130,246,0.4)] transition-shadow duration-300"
+                      : "opacity-50",
+                  ].join(" ")}
+                >
+                  <div className="flex shrink-0 flex-col gap-0.5 px-3 py-1.5">
+                    <div className="inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-extrabold text-white bg-blue-500">
+                      2번
+                    </div>
+                    <div className="truncate text-[13px] font-bold text-white/90">{player.name}</div>
+                    <div className="text-[10px] text-white/50">
+                      목표 {player.target} ({remainingScore}/{remainingFinishCount})
+                    </div>
+                  </div>
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+                    <button
+                      type="button"
+                      onClick={() => handleScoreAdd(index)}
+                      disabled={!isActive}
+                      className={[
+                        "flex touch-manipulation flex-col items-center justify-center gap-1 rounded-2xl px-6 py-4 transition-all",
+                        isActive
+                          ? "cursor-pointer active:scale-95 active:bg-white/5"
+                          : "cursor-default pointer-events-none",
+                      ].join(" ")}
+                      aria-label="2번 선수 득점"
+                    >
+                      {isCushion ? (
+                        <span className="text-[clamp(2.5rem,15vmin,7rem)] font-black leading-none text-[#1fe85b]">
+                          쿠션
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-[clamp(4rem,35vmin,10rem)] font-black leading-none tracking-tight text-blue-500">
+                            {player.score}
+                          </span>
+                          {isActive && (
+                            <span className="flex items-center gap-1 text-[14px] font-bold text-[#1fe85b]">
+                              <Plus className="h-5 w-5" /> 터치하여 득점
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex shrink-0 items-center justify-between border-t border-white/5 px-3 py-1 text-[11px]">
+                    <span className="font-semibold text-white/60">이닝 {inningsValue}</span>
+                    <span className="font-bold text-[#1fe85b]">
+                      {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
