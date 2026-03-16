@@ -1,13 +1,20 @@
 "use client";
 
 import { saveMatch } from "@/lib/matches";
-import { ChevronLeft, Maximize2, Minimize2, Plus, Trophy } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { ChevronLeft, Clock, Maximize2, Minimize2, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function clampToNonNegative(n: number) {
   return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+function formatPlayTime(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 type RankEntry = { playerIndex: number; rank: number };
@@ -199,6 +206,8 @@ function PlayContent() {
   const [showWinModal, setShowWinModal] = useState(false);
   const [winnerName, setWinnerName] = useState("");
   const [completedRanks, setCompletedRanks] = useState<RankEntry[]>([]);
+  const [gameStartMs, setGameStartMs] = useState(() => Date.now());
+  const [elapsedSec, setElapsedSec] = useState(0);
 
   const colorBgClasses = [
     "bg-orange-500",
@@ -266,6 +275,14 @@ function PlayContent() {
     document.addEventListener("fullscreenchange", handler);
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
+
+  useEffect(() => {
+    if (showWinModal) return;
+    const id = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - gameStartMs) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [gameStartMs, showWinModal]);
 
   const toggleFullscreen = async () => {
     try {
@@ -365,12 +382,13 @@ function PlayContent() {
     setShowWinModal(true);
   };
 
-  const isLandscapeTwoPlayer = players.length === 2;
+  const isLandscapeMode = players.length >= 2;
+  const isTwoPlayer = players.length === 2;
 
   return (
     <div className="min-h-screen bg-[#0b0b0b] text-white">
-      {/* ========== 가로모드 레이아웃 (거치형 스코어보드) 4:2:4 ========== */}
-      {isLandscapeTwoPlayer && (
+      {/* ========== 가로모드 레이아웃 (거치형 스코어보드) ========== */}
+      {isLandscapeMode && (
         <div className="hidden h-screen flex-col landscape:flex">
           {/* 상단 바 최소화 */}
           <header className="flex shrink-0 items-center justify-between border-b border-white/5 bg-zinc-900/80 px-2 py-1">
@@ -397,8 +415,9 @@ function PlayContent() {
             </button>
           </header>
 
+          {isTwoPlayer ? (
           <div className="grid min-h-0 flex-1 grid-cols-[4fr_2fr_4fr]">
-            {/* 좌측(4): 1번 선수 점수판 - 본인 턴일 때만 터치로 득점 */}
+            {/* 좌측(4): 1번 선수 */}
             {(() => {
               const index = 0;
               const player = players[index];
@@ -412,8 +431,6 @@ function PlayContent() {
                 inningsValue > 0 && Number.isFinite(player.score)
                   ? player.score / delta / inningsValue
                   : 0;
-              const remainingScore = Math.max(0, player.target - player.score);
-              const remainingFinishCount = remainingFinish[index] ?? 0;
               const isCushion = player.score >= player.target;
               return (
                 <div
@@ -425,14 +442,11 @@ function PlayContent() {
                       : "opacity-50",
                   ].join(" ")}
                 >
-                  <div className="flex shrink-0 flex-col gap-0.5 px-3 py-1.5">
-                    <div className="inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-extrabold text-white bg-orange-500">
-                      1번
-                    </div>
-                    <div className="truncate text-[13px] font-bold text-white/90">{player.name}</div>
-                    <div className="text-[10px] text-white/50">
-                      목표 {player.target} ({remainingScore}/{remainingFinishCount})
-                    </div>
+                  <div className="flex shrink-0 items-center justify-between px-4 pt-2">
+                    <span className="text-[12px] font-bold text-white/80">1P</span>
+                  </div>
+                  <div className="flex shrink-0 justify-center py-1">
+                    <span className="text-[15px] font-bold text-white">{player.name}</span>
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
                     <button
@@ -448,85 +462,111 @@ function PlayContent() {
                       aria-label="1번 선수 득점"
                     >
                       {isCushion ? (
-                        <span className="text-[clamp(2.5rem,15vmin,7rem)] font-black leading-none text-[#1fe85b]">
+                        <span className="text-[clamp(2.5rem,18vmin,8rem)] font-black leading-none text-[#1fe85b]">
                           쿠션
                         </span>
                       ) : (
                         <>
-                          <span className="text-[clamp(4rem,35vmin,10rem)] font-black leading-none tracking-tight text-orange-500">
+                          <span className="text-[clamp(4rem,40vmin,12rem)] font-black leading-none tracking-tight text-orange-500">
                             {player.score}
                           </span>
                           {isActive && (
-                            <span className="flex items-center gap-1 text-[14px] font-bold text-[#1fe85b]">
-                              <Plus className="h-5 w-5" /> 터치하여 득점
+                            <span className="flex items-center gap-1 text-[13px] font-bold text-[#1fe85b]">
+                              <Plus className="h-4 w-4" /> 터치하여 득점
                             </span>
                           )}
                         </>
                       )}
                     </button>
                   </div>
-                  <div className="flex shrink-0 items-center justify-between border-t border-white/5 px-3 py-1 text-[11px]">
-                    <span className="font-semibold text-white/60">이닝 {inningsValue}</span>
-                    <span className="font-bold text-[#1fe85b]">
-                      {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
-                    </span>
+                  <div className="flex shrink-0 flex-col items-center gap-0.5 border-t border-white/5 py-2 text-[12px]">
+                    <div className="flex items-center gap-4">
+                      <span className="text-white/70">이닝 {inningsValue}</span>
+                      <span className="font-bold text-[#1fe85b]">
+                        평균 {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
             })()}
 
-            {/* 중앙(2): 컨트롤 바 - 턴 넘기기, 되돌리기, -10, 게임 종료 */}
+            {/* 중앙(2): 플레이 시간, -10, 턴 종료, 되돌리기, 게임 종료, 현재 턴 */}
             <div
               className={[
-                "flex flex-col justify-evenly border-x border-white/10 px-3 py-4 transition-colors duration-300",
+                "flex flex-col justify-between border-x border-white/10 bg-zinc-900/50 px-3 py-4 transition-colors duration-300",
                 activeIndex === 0
-                  ? "bg-orange-950/30"
-                  : "bg-blue-950/30",
+                  ? "bg-orange-950/20"
+                  : "bg-blue-950/20",
               ].join(" ")}
             >
-              <button
-                type="button"
-                onClick={handleTurnPass}
-                className="flex min-h-[64px] items-center justify-center rounded-xl bg-[#ff2d61] px-4 py-4 text-[18px] font-black text-white shadow-lg transition-transform active:scale-95"
-              >
-                턴 넘기기
-              </button>
-              <button
-                type="button"
-                disabled={history.length === 0}
-                onClick={handleUndo}
-                className={[
-                  "flex min-h-[48px] items-center justify-center rounded-lg px-4 py-3 text-[13px] font-extrabold transition-transform active:scale-95",
-                  history.length === 0
-                    ? "cursor-not-allowed bg-zinc-800 text-white/40"
-                    : "bg-zinc-700 text-white",
-                ].join(" ")}
-              >
-                되돌리기
-              </button>
-              <button
-                type="button"
-                onClick={() => handleScoreSubtract(activeIndex)}
-                disabled={players[activeIndex]?.score === 0}
-                className={[
-                  "flex min-h-[48px] items-center justify-center rounded-lg px-4 py-3 text-[16px] font-extrabold transition-transform active:scale-95",
-                  (players[activeIndex]?.score ?? 0) === 0
-                    ? "cursor-not-allowed bg-zinc-800 text-white/40"
-                    : "bg-zinc-600 text-white",
-                ].join(" ")}
-              >
-                -{delta}
-              </button>
-              <button
-                type="button"
-                onClick={handleGameEnd}
-                className="flex min-h-[48px] items-center justify-center rounded-lg bg-zinc-800 px-4 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-95"
-              >
-                게임 종료
-              </button>
+              <div className="flex shrink-0 flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5 text-[11px] text-white/70">
+                  <Clock className="h-4 w-4 text-[#1fe85b]" />
+                  플레이 시간
+                </div>
+                <div className="text-[20px] font-black tabular-nums text-white">
+                  {formatPlayTime(elapsedSec)}
+                </div>
+              </div>
+
+              <div className="flex flex-1 flex-col justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleScoreSubtract(activeIndex)}
+                  disabled={players[activeIndex]?.score === 0}
+                  className={[
+                    "flex min-h-[44px] items-center justify-center rounded-lg border-2 px-4 py-2 text-[18px] font-extrabold transition-transform active:scale-95",
+                    (players[activeIndex]?.score ?? 0) === 0
+                      ? "cursor-not-allowed border-red-900/50 bg-zinc-800 text-white/30"
+                      : "border-red-500/60 bg-zinc-800 text-orange-400",
+                  ].join(" ")}
+                >
+                  -{delta}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTurnPass}
+                  className="flex min-h-[56px] items-center justify-center rounded-xl bg-[#1fe85b] px-4 py-4 text-[16px] font-black text-[#0b0b0b] shadow-lg transition-transform active:scale-95"
+                >
+                  턴 종료
+                </button>
+                <button
+                  type="button"
+                  disabled={history.length === 0}
+                  onClick={handleUndo}
+                  className={[
+                    "flex min-h-[40px] items-center justify-center rounded-lg px-4 py-2 text-[12px] font-extrabold transition-transform active:scale-95",
+                    history.length === 0
+                      ? "cursor-not-allowed bg-zinc-800 text-white/40"
+                      : "bg-zinc-700 text-white",
+                  ].join(" ")}
+                >
+                  되돌리기
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGameEnd}
+                  className="flex min-h-[40px] items-center justify-center rounded-lg bg-zinc-800 px-4 py-2 text-[12px] font-extrabold text-white transition-transform active:scale-95"
+                >
+                  게임 종료
+                </button>
+              </div>
+
+              <div className="flex shrink-0 flex-col items-center gap-1 pt-2">
+                <span className="text-[10px] font-semibold text-white/60">현재 턴</span>
+                <div
+                  className={[
+                    "rounded-full px-4 py-2 text-[13px] font-bold text-white",
+                    activeIndex === 0 ? "bg-orange-500" : "bg-blue-500",
+                  ].join(" ")}
+                >
+                  {players[activeIndex]?.name ?? `${activeIndex + 1}번 선수`}
+                </div>
+              </div>
             </div>
 
-            {/* 우측(4): 2번 선수 점수판 - 본인 턴일 때만 터치로 득점 */}
+            {/* 우측(4): 2번 선수 - 2P 라벨, 이름, 점수, 이닝/평균 */}
             {(() => {
               const index = 1;
               const player = players[index];
@@ -540,8 +580,6 @@ function PlayContent() {
                 inningsValue > 0 && Number.isFinite(player.score)
                   ? player.score / delta / inningsValue
                   : 0;
-              const remainingScore = Math.max(0, player.target - player.score);
-              const remainingFinishCount = remainingFinish[index] ?? 0;
               const isCushion = player.score >= player.target;
               return (
                 <div
@@ -553,14 +591,11 @@ function PlayContent() {
                       : "opacity-50",
                   ].join(" ")}
                 >
-                  <div className="flex shrink-0 flex-col gap-0.5 px-3 py-1.5">
-                    <div className="inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-extrabold text-white bg-blue-500">
-                      2번
-                    </div>
-                    <div className="truncate text-[13px] font-bold text-white/90">{player.name}</div>
-                    <div className="text-[10px] text-white/50">
-                      목표 {player.target} ({remainingScore}/{remainingFinishCount})
-                    </div>
+                  <div className="flex shrink-0 items-center justify-end px-4 pt-2">
+                    <span className="text-[12px] font-bold text-white/80">2P</span>
+                  </div>
+                  <div className="flex shrink-0 justify-center py-1">
+                    <span className="text-[15px] font-bold text-white">{player.name}</span>
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
                     <button
@@ -576,41 +611,276 @@ function PlayContent() {
                       aria-label="2번 선수 득점"
                     >
                       {isCushion ? (
-                        <span className="text-[clamp(2.5rem,15vmin,7rem)] font-black leading-none text-[#1fe85b]">
+                        <span className="text-[clamp(2.5rem,18vmin,8rem)] font-black leading-none text-[#1fe85b]">
                           쿠션
                         </span>
                       ) : (
                         <>
-                          <span className="text-[clamp(4rem,35vmin,10rem)] font-black leading-none tracking-tight text-blue-500">
+                          <span className="text-[clamp(4rem,40vmin,12rem)] font-black leading-none tracking-tight text-blue-500">
                             {player.score}
                           </span>
                           {isActive && (
-                            <span className="flex items-center gap-1 text-[14px] font-bold text-[#1fe85b]">
-                              <Plus className="h-5 w-5" /> 터치하여 득점
+                            <span className="flex items-center gap-1 text-[13px] font-bold text-[#1fe85b]">
+                              <Plus className="h-4 w-4" /> 터치하여 득점
                             </span>
                           )}
                         </>
                       )}
                     </button>
                   </div>
-                  <div className="flex shrink-0 items-center justify-between border-t border-white/5 px-3 py-1 text-[11px]">
-                    <span className="font-semibold text-white/60">이닝 {inningsValue}</span>
-                    <span className="font-bold text-[#1fe85b]">
-                      {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
-                    </span>
+                  <div className="flex shrink-0 flex-col items-center gap-0.5 border-t border-white/5 py-2 text-[12px]">
+                    <div className="flex items-center gap-4">
+                      <span className="text-white/70">이닝 {inningsValue}</span>
+                      <span className="font-bold text-[#1fe85b]">
+                        평균 {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
             })()}
           </div>
+          ) : (
+          /* 3인 이상 가로모드: 좌측 절반 | 컨트롤 | 우측 절반 */
+          <div className="grid min-h-0 flex-1 grid-cols-[1fr_auto_1fr]">
+            <div className="flex min-h-0 flex-col overflow-y-auto border-r border-white/5">
+              {players
+                .slice(0, Math.ceil(players.length / 2))
+                .map((_, i) => {
+                  const index = i;
+                  const player = players[index];
+                  const isActive = index === activeIndex;
+                  const rawInningsValue = innings[index];
+                  const inningsValue =
+                    typeof rawInningsValue === "number" && Number.isFinite(rawInningsValue)
+                      ? rawInningsValue
+                      : 0;
+                  const avg =
+                    inningsValue > 0 && Number.isFinite(player.score)
+                      ? player.score / delta / inningsValue
+                      : 0;
+                  const isCushion = player.score >= player.target;
+                  const completed = completedRanks.some((e) => e.playerIndex === index);
+                  return (
+                    <div
+                      key={player.id}
+                      className={[
+                        "flex shrink-0 flex-col border-b border-white/5 bg-zinc-900 px-3 py-3",
+                        isActive
+                          ? "ring-2 ring-inset ring-[#1fe85b]/50"
+                          : completed
+                            ? "opacity-60"
+                            : "opacity-70",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={[
+                          "rounded px-2 py-0.5 text-[11px] font-bold text-white",
+                          colorBgClasses[index % 6],
+                        ].join(" ")}>
+                          {index + 1}P
+                        </span>
+                        {completed && (
+                          <span className="text-[10px] font-bold text-[#1fe85b]">
+                            FINISH
+                          </span>
+                        )}
+                      </div>
+                      <div className="truncate text-[13px] font-bold text-white">{player.name}</div>
+                      <div className="flex flex-1 items-center justify-center py-2">
+                        <button
+                          type="button"
+                          onClick={() => handleScoreAdd(index)}
+                          disabled={!isActive}
+                          className={[
+                            "flex touch-manipulation flex-col items-center justify-center",
+                            isActive
+                              ? "cursor-pointer active:scale-95"
+                              : "cursor-default pointer-events-none",
+                          ].join(" ")}
+                        >
+                          {isCushion ? (
+                            <span className="text-[clamp(1.5rem,8vmin,4rem)] font-black text-[#1fe85b]">쿠션</span>
+                          ) : (
+                            <span className={[
+                              "text-[clamp(2rem,12vmin,5rem)] font-black",
+                              colorTextClasses[index % 6],
+                            ].join(" ")}>
+                              {player.score}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex justify-center gap-2 text-[10px]">
+                        <span className="text-white/60">이닝 {inningsValue}</span>
+                        <span className="font-bold text-[#1fe85b]">
+                          {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* 중앙: 컨트롤 */}
+            <div className={[
+              "flex min-w-[100px] flex-col justify-between border-x border-white/10 bg-zinc-900/50 px-3 py-4",
+              `${
+                activeIndex < Math.ceil(players.length / 2)
+                  ? "bg-orange-950/20"
+                  : "bg-blue-950/20"
+              }`,
+            ].join(" ")}>
+              <div className="flex shrink-0 flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5 text-[11px] text-white/70">
+                  <Clock className="h-4 w-4 text-[#1fe85b]" />
+                  플레이 시간
+                </div>
+                <div className="text-[18px] font-black tabular-nums text-white">
+                  {formatPlayTime(elapsedSec)}
+                </div>
+              </div>
+              <div className="flex flex-1 flex-col justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleScoreSubtract(activeIndex)}
+                  disabled={players[activeIndex]?.score === 0}
+                  className={[
+                    "flex min-h-[40px] items-center justify-center rounded-lg border-2 px-3 py-2 text-[14px] font-extrabold",
+                    (players[activeIndex]?.score ?? 0) === 0
+                      ? "cursor-not-allowed border-red-900/50 bg-zinc-800 text-white/30"
+                      : "border-red-500/60 bg-zinc-800 text-orange-400",
+                  ].join(" ")}
+                >
+                  -{delta}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTurnPass}
+                  className="flex min-h-[48px] items-center justify-center rounded-xl bg-[#1fe85b] px-3 py-3 text-[14px] font-black text-[#0b0b0b]"
+                >
+                  턴 종료
+                </button>
+                <button
+                  type="button"
+                  disabled={history.length === 0}
+                  onClick={handleUndo}
+                  className={[
+                    "flex min-h-[36px] items-center justify-center rounded-lg px-3 py-2 text-[11px] font-extrabold",
+                    history.length === 0
+                      ? "cursor-not-allowed bg-zinc-800 text-white/40"
+                      : "bg-zinc-700 text-white",
+                  ].join(" ")}
+                >
+                  되돌리기
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGameEnd}
+                  className="flex min-h-[36px] items-center justify-center rounded-lg bg-zinc-800 px-3 py-2 text-[11px] font-extrabold text-white"
+                >
+                  게임 종료
+                </button>
+              </div>
+              <div className="flex shrink-0 flex-col items-center gap-1">
+                <span className="text-[10px] text-white/60">현재 턴</span>
+                <div
+                  className={[
+                    "rounded-full px-3 py-1.5 text-[12px] font-bold text-white",
+                    colorBgClasses[activeIndex % 6],
+                  ].join(" ")}
+                >
+                  {players[activeIndex]?.name ?? `${activeIndex + 1}번`}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-col overflow-y-auto border-l border-white/5">
+              {players
+                .slice(Math.ceil(players.length / 2))
+                .map((_, i) => {
+                  const index = Math.ceil(players.length / 2) + i;
+                  const player = players[index];
+                  const isActive = index === activeIndex;
+                  const rawInningsValue = innings[index];
+                  const inningsValue =
+                    typeof rawInningsValue === "number" && Number.isFinite(rawInningsValue)
+                      ? rawInningsValue
+                      : 0;
+                  const avg =
+                    inningsValue > 0 && Number.isFinite(player.score)
+                      ? player.score / delta / inningsValue
+                      : 0;
+                  const isCushion = player.score >= player.target;
+                  const completed = completedRanks.some((e) => e.playerIndex === index);
+                  return (
+                    <div
+                      key={player.id}
+                      className={[
+                        "flex shrink-0 flex-col border-b border-white/5 bg-zinc-900 px-3 py-3",
+                        isActive
+                          ? "ring-2 ring-inset ring-[#1fe85b]/50"
+                          : completed
+                            ? "opacity-60"
+                            : "opacity-70",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={[
+                          "rounded px-2 py-0.5 text-[11px] font-bold text-white",
+                          colorBgClasses[index % 6],
+                        ].join(" ")}>
+                          {index + 1}P
+                        </span>
+                        {completed && (
+                          <span className="text-[10px] font-bold text-[#1fe85b]">FINISH</span>
+                        )}
+                      </div>
+                      <div className="truncate text-[13px] font-bold text-white">{player.name}</div>
+                      <div className="flex flex-1 items-center justify-center py-2">
+                        <button
+                          type="button"
+                          onClick={() => handleScoreAdd(index)}
+                          disabled={!isActive}
+                          className={[
+                            "flex touch-manipulation flex-col items-center justify-center",
+                            isActive
+                              ? "cursor-pointer active:scale-95"
+                              : "cursor-default pointer-events-none",
+                          ].join(" ")}
+                        >
+                          {isCushion ? (
+                            <span className="text-[clamp(1.5rem,8vmin,4rem)] font-black text-[#1fe85b]">쿠션</span>
+                          ) : (
+                            <span className={[
+                              "text-[clamp(2rem,12vmin,5rem)] font-black",
+                              colorTextClasses[index % 6],
+                            ].join(" ")}>
+                              {player.score}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex justify-center gap-2 text-[10px]">
+                        <span className="text-white/60">이닝 {inningsValue}</span>
+                        <span className="font-bold text-[#1fe85b]">
+                          {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+          )}
         </div>
       )}
 
-      {/* ========== 세로모드 레이아웃 (기존 UI) - 3인+ 또는 세로화면 ========== */}
+      {/* ========== 세로모드 레이아웃 (기존 UI) - 세로화면에서만 ========== */}
       <main
         className={[
           "mx-auto min-h-screen w-full max-w-[420px] pb-[172px]",
-          isLandscapeTwoPlayer && "landscape:hidden",
+          isLandscapeMode && "landscape:hidden",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -936,7 +1206,7 @@ function PlayContent() {
       <div
         className={[
           "fixed inset-x-0 bottom-0 bg-[#0b0b0b] pb-7",
-          isLandscapeTwoPlayer && "landscape:hidden",
+          isLandscapeMode && "landscape:hidden",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -1038,9 +1308,9 @@ function PlayContent() {
               return;
             }
 
-            const p1UserId = players[0]?.userId;
-            if (!p1UserId) {
-              console.log("게스트 모드에서는 기록이 저장되지 않습니다");
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
               router.push("/");
               return;
             }
