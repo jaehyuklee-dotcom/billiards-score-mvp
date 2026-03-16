@@ -2,7 +2,7 @@
 
 import { saveMatch } from "@/lib/matches";
 import { createClient } from "@/lib/supabase/client";
-import { isFullscreen, toggleFullscreen } from "@/lib/fullscreen";
+import { isFullscreen, requestFullscreen, toggleFullscreen } from "@/lib/fullscreen";
 import { ChevronLeft, Clock, Maximize2, Minimize2, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
@@ -271,6 +271,12 @@ function PlayContent() {
   };
 
   const [fullscreenActive, setFullscreenActive] = useState(false);
+
+  // 게임판 진입 시 디폴트로 전체화면 진입
+  useEffect(() => {
+    requestFullscreen(document.documentElement);
+  }, []);
+
   useEffect(() => {
     const handler = () => setFullscreenActive(isFullscreen());
     handler();
@@ -877,7 +883,7 @@ function PlayContent() {
         </div>
       )}
 
-      {/* ========== 세로모드 레이아웃 (기존 UI) - 세로화면에서만 ========== */}
+      {/* ========== 세로모드 레이아웃 - 세로화면에서만 ========== */}
       <main
         className={[
           "flex min-h-0 flex-1 flex-col overflow-hidden landscape:hidden",
@@ -886,7 +892,7 @@ function PlayContent() {
           .filter(Boolean)
           .join(" ")}
       >
-        <header className="flex h-[7vh] min-h-[44px] shrink-0 items-center justify-between border-b border-white/10 bg-[#1a1a1a] px-2">
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#1a1a1a] px-3">
           <button
             type="button"
             onClick={() => router.push("/setup")}
@@ -895,7 +901,7 @@ function PlayContent() {
           >
             <ChevronLeft className="h-5 w-5 text-black/70" aria-hidden="true" />
           </button>
-          <div className="text-[14px] font-extrabold text-white/80">
+          <div className="text-[15px] font-extrabold text-white/90">
             종목 : {gameType}구
           </div>
           <button
@@ -912,7 +918,7 @@ function PlayContent() {
           </button>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {players.length === 2 ? (
           <>
             {players.map((player, index) => {
@@ -935,33 +941,30 @@ function PlayContent() {
                 <section
                   key={player.id}
                   className={[
-                    "flex min-h-0 flex-1 flex-col justify-center px-4 py-2 bg-[#1a1a1a]",
-                    isFirst ? "" : "border-t border-black/60",
+                    "flex flex-col bg-[#1a1a1a] px-5 py-4",
+                    isFirst ? "" : "border-t-2 border-black/40",
                     isActive
-                      ? `relative z-10 border-y border-white/20 ${
+                      ? `relative z-10 border-y-2 border-white/25 ${
                           glowClasses[index] ?? glowClasses[0]
                         }`
-                      : "opacity-40",
+                      : "opacity-50",
                   ].join(" ")}
                 >
-                  <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
                     <div
                       className={[
-                        "inline-flex rounded-md px-4 py-2 text-[14px] font-extrabold text-white",
+                        "shrink-0 rounded-md px-3 py-1.5 text-[13px] font-extrabold text-white",
                         colorBgClasses[index] ?? "bg-white/10",
                       ].join(" ")}
                     >
                       {index + 1}번 선수
                     </div>
-                    <div className="text-[22px] font-extrabold text-white">
+                    <div className="truncate text-right text-[16px] font-bold text-white">
                       {player.name}
                     </div>
-                    <div className="text-[14px] font-extrabold text-white/60">
-                      목표 점수 : {player.target}{" "}
-                      <span className="text-[13px] font-semibold text-white/50">
-                        ({remainingScore} / {remainingFinishCount})
-                      </span>
-                    </div>
+                  </div>
+                  <div className="mt-1 text-[13px] text-white/60">
+                    목표 {player.target}점 · 남은 {remainingScore} / {remainingFinishCount}
                   </div>
 
                   <button
@@ -1018,19 +1021,19 @@ function PlayContent() {
                       );
                     }}
                     className={[
-                      "mt-2 flex min-h-0 flex-1 flex-col items-center justify-center py-4",
+                      "mt-5 flex w-full items-center justify-center py-8",
                       isActive ? "" : "pointer-events-none",
                     ].join(" ")}
                     aria-label={`${index + 1}번 선수 득점`}
                   >
                     {isCushion ? (
-                      <div className="text-[clamp(3rem,15vh,80px)] font-extrabold leading-none text-[#1fe85b]">
+                      <div className="text-[72px] font-extrabold leading-none text-[#1fe85b]">
                         쿠션
                       </div>
                     ) : (
                       <div
                         className={[
-                          "text-[clamp(4rem,22vh,120px)] font-extrabold leading-none",
+                          "text-[96px] font-extrabold leading-none",
                           colorTextClasses[index] ?? "text-white",
                         ].join(" ")}
                       >
@@ -1039,31 +1042,21 @@ function PlayContent() {
                     )}
                   </button>
 
-                  <div className="mt-2 flex items-end justify-between">
-                    <div className="space-y-1">
-                      <div className="text-[18px] font-extrabold text-white/70">
-                        이닝
-                      </div>
-                      <div className="text-[20px] font-extrabold text-white">
-                        {inningsValue}
-                      </div>
-                    </div>
-                    <div className="space-y-1 text-right">
-                      <div className="text-[18px] font-extrabold text-white/70">
-                        평균 득점
-                      </div>
-                      <div className="text-[20px] font-extrabold text-[#1fe85b]">
-                        {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
-                      </div>
-                    </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+                    <span className="text-[14px] font-semibold text-white/70">
+                      이닝 {inningsValue}
+                    </span>
+                    <span className="text-[14px] font-bold text-[#1fe85b]">
+                      평균 {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                    </span>
                   </div>
                 </section>
               );
             })}
           </>
         ) : (
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-2">
-            <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2">
+          <section className="flex-1 overflow-y-auto px-4 py-3">
+            <div className="grid grid-cols-2 gap-3">
               {players.map((player, index) => {
                 const isActive = index === activeIndex && !isCompleted(index);
                 const completed = isCompleted(index);
@@ -1077,7 +1070,6 @@ function PlayContent() {
                   inningsValue > 0 && Number.isFinite(player.score)
                     ? player.score / delta / inningsValue
                     : 0;
-                const isFirstRow = index === 0 || index === 1;
                 const remainingScore = Math.max(0, player.target - player.score);
                 const remainingFinishCount = remainingFinish[index] ?? 0;
                 const isCushion = player.score >= player.target;
@@ -1086,14 +1078,13 @@ function PlayContent() {
                   <div
                     key={player.id}
                     className={[
-                      "rounded-2xl bg-[#1a1a1a] px-4 py-4 relative",
-                      !isFirstRow ? "mt-2" : "",
+                      "rounded-xl bg-[#1a1a1a] px-4 py-4 relative",
                       completed ? "opacity-60" : "",
                       isActive
-                        ? `border border-white/25 ${
+                        ? `border-2 border-white/30 ${
                             glowClasses[index] ?? glowClasses[0]
                           }`
-                        : !completed ? "opacity-40" : "",
+                        : !completed ? "opacity-50" : "",
                     ].join(" ")}
                   >
                     {completed && (
@@ -1174,39 +1165,29 @@ function PlayContent() {
                         );
                       }}
                       className={[
-                        "mt-4 flex w-full items-center justify-center rounded-xl py-6",
+                        "mt-3 flex w-full items-center justify-center rounded-lg py-5",
                         isActive ? "" : "pointer-events-none",
                       ].join(" ")}
                       aria-label={`${index + 1}번 선수 득점`}
                     >
                       {isCushion ? (
-                        <div className="text-[32px] font-extrabold leading-none text-[#1fe85b]">
+                        <div className="text-[36px] font-extrabold leading-none text-[#1fe85b]">
                           쿠션
                         </div>
                       ) : (
-                        <div className="text-[40px] font-extrabold leading-none text-white">
+                        <div className="text-[44px] font-extrabold leading-none text-white">
                           {player.score}
                         </div>
                       )}
                     </button>
 
-                    <div className="mt-3 flex items-end justify-between">
-                      <div>
-                        <div className="text-[11px] font-semibold text-white/70">
-                          이닝
-                        </div>
-                        <div className="text-[14px] font-extrabold text-white">
-                          {inningsValue}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[11px] font-semibold text-white/70">
-                          평균 득점
-                        </div>
-                        <div className="text-[14px] font-extrabold text-[#1fe85b]">
-                          {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
-                        </div>
-                      </div>
+                    <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+                      <span className="text-[12px] font-semibold text-white/70">
+                        이닝 {inningsValue}
+                      </span>
+                      <span className="text-[12px] font-bold text-[#1fe85b]">
+                        평균 {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                      </span>
                     </div>
                   </div>
                 );
@@ -1220,7 +1201,7 @@ function PlayContent() {
       {/* Control Bar - 세로모드에서만 표시 */}
       <div
         className={[
-          "shrink-0 bg-[#0b0b0b] px-4 pb-safe pt-2 landscape:hidden",
+          "shrink-0 bg-[#0b0b0b] px-4 pb-6 pt-3 landscape:hidden",
           isLandscapeMode && "landscape:hidden",
         ]
           .filter(Boolean)
@@ -1239,12 +1220,12 @@ function PlayContent() {
                 return newInnings;
               });
             }}
-            className="flex h-[7vh] min-h-[48px] max-h-[60px] w-full flex-1 items-center justify-center rounded-md bg-[#ff2d61] text-[clamp(18px,4vw,24px)] font-extrabold text-white"
+            className="flex h-14 w-full items-center justify-center rounded-xl bg-[#ff2d61] text-[20px] font-extrabold text-white"
           >
             턴 넘기기
           </button>
 
-          <div className="mt-2 grid flex-1 grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             <button
               type="button"
               disabled={history.length === 0}
@@ -1261,7 +1242,7 @@ function PlayContent() {
                 });
               }}
               className={[
-                "flex h-[6vh] min-h-[44px] max-h-[56px] items-center justify-center rounded-md text-[clamp(14px,3.5vw,18px)] font-extrabold",
+                "flex h-12 items-center justify-center rounded-lg text-[15px] font-extrabold",
                 history.length === 0
                   ? "bg-[#3a3a3a] text-white/40"
                   : "bg-[#3a3a3a] text-white",
@@ -1281,7 +1262,7 @@ function PlayContent() {
                   )
                 );
               }}
-              className="flex h-[6vh] min-h-[44px] max-h-[56px] items-center justify-center rounded-md bg-[#7b7b7b] text-[clamp(16px,4vw,22px)] font-extrabold text-white"
+              className="flex h-12 items-center justify-center rounded-lg bg-[#7b7b7b] text-[20px] font-extrabold text-white"
             >
               -{delta}
             </button>
@@ -1292,7 +1273,7 @@ function PlayContent() {
                 setWinnerName(current.name);
                 setShowWinModal(true);
               }}
-              className="flex h-[6vh] min-h-[44px] max-h-[56px] items-center justify-center rounded-md bg-[#2a2a2a] text-[clamp(16px,3.5vw,20px)] font-extrabold text-white"
+              className="flex h-12 items-center justify-center rounded-lg bg-[#2a2a2a] text-[16px] font-extrabold text-white"
             >
               게임 종료
             </button>
