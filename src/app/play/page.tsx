@@ -1,7 +1,7 @@
 "use client";
 
 import { saveMatch } from "@/lib/matches";
-import { ChevronLeft, Maximize2, Minimize2, Trophy } from "lucide-react";
+import { ChevronLeft, Maximize2, Minimize2, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -369,37 +369,36 @@ function PlayContent() {
 
   return (
     <div className="min-h-screen bg-[#0b0b0b] text-white">
-      {/* ========== 가로모드 레이아웃 (거치형 스코어보드) ========== */}
+      {/* ========== 가로모드 레이아웃 (거치형 스코어보드) 4:2:4 ========== */}
       {isLandscapeTwoPlayer && (
         <div className="hidden h-screen flex-col landscape:flex">
-          <header className="flex shrink-0 items-center justify-center border-b border-white/10 bg-[#1a1a1a] px-4 py-2">
+          {/* 상단 바 최소화 */}
+          <header className="flex shrink-0 items-center justify-between border-b border-white/5 bg-zinc-900/80 px-2 py-1">
             <button
               type="button"
               onClick={() => router.push("/setup")}
-              className="absolute left-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#d9d9d9]/70"
+              className="inline-flex h-8 w-8 items-center justify-center rounded bg-white/10"
               aria-label="홈으로"
             >
-              <ChevronLeft className="h-5 w-5 text-black/70" aria-hidden="true" />
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
-            <div className="text-[18px] font-extrabold text-white/80">
-              {gameType}구
-            </div>
+            <span className="text-[12px] font-bold text-white/60">{gameType}구</span>
             <button
               type="button"
               onClick={toggleFullscreen}
-              className="absolute right-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-white/10 text-white/80 transition-colors hover:bg-white/20"
+              className="inline-flex h-8 w-8 items-center justify-center rounded bg-white/10"
               aria-label={isFullscreen ? "전체화면 나가기" : "전체화면"}
             >
               {isFullscreen ? (
-                <Minimize2 className="h-5 w-5" aria-hidden="true" />
+                <Minimize2 className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <Maximize2 className="h-5 w-5" aria-hidden="true" />
+                <Maximize2 className="h-4 w-4" aria-hidden="true" />
               )}
             </button>
           </header>
 
-          <div className="grid min-h-0 flex-1 grid-cols-[1fr_auto_1fr]">
-            {/* 왼쪽: 1번 선수 */}
+          <div className="grid min-h-0 flex-1 grid-cols-[4fr_2fr_4fr]">
+            {/* 좌측(4) / 우측(4): 점수판 */}
             {[0, 1].map((index) => {
               const player = players[index];
               const isActive = index === activeIndex;
@@ -415,100 +414,98 @@ function PlayContent() {
               const remainingScore = Math.max(0, player.target - player.score);
               const remainingFinishCount = remainingFinish[index] ?? 0;
               const isCushion = player.score >= player.target;
-              const neonBorder =
+              const borderActive =
                 index === 0
-                  ? "shadow-[0_0_20px_rgba(249,115,22,0.6)]"
-                  : "shadow-[0_0_20px_rgba(59,130,246,0.6)]";
+                  ? "border-l-4 border-l-orange-500 shadow-[0_0_24px_rgba(249,115,22,0.4)]"
+                  : "border-r-4 border-r-blue-500 shadow-[0_0_24px_rgba(59,130,246,0.4)]";
 
               return (
                 <div
                   key={player.id}
                   className={[
-                    "flex flex-col border-r border-l border-white/5",
-                    index === 1 && "border-l-0",
+                    "flex flex-col bg-zinc-900",
+                    index === 1 && "border-l border-white/5",
                     isActive
-                      ? `bg-[#1a1a1a] ${index === 0 ? "border-l-4 border-l-orange-500" : "border-r-4 border-r-blue-500"} ${neonBorder}`
-                      : "bg-[#0f0f0f] opacity-60",
+                      ? `ring-2 ring-inset ring-[#1fe85b]/50 transition-shadow duration-300 ${borderActive}`
+                      : "opacity-50",
                   ].join(" ")}
                 >
-                  <div className="flex shrink-0 flex-col gap-1 px-3 py-2">
+                  <div className="flex shrink-0 flex-col gap-0.5 px-3 py-1.5">
                     <div
                       className={[
-                        "inline-flex w-fit rounded-md px-3 py-1 text-[12px] font-extrabold text-white",
+                        "inline-flex w-fit rounded px-2 py-0.5 text-[11px] font-extrabold text-white",
                         colorBgClasses[index],
                       ].join(" ")}
                     >
-                      {index + 1}번 선수
+                      {index + 1}번
                     </div>
-                    <div className="truncate text-[14px] font-bold text-white/90">
+                    <div className="truncate text-[13px] font-bold text-white/90">
                       {player.name}
                     </div>
-                    <div className="text-[11px] font-semibold text-white/50">
-                      목표 {player.target} ({remainingScore} / {remainingFinishCount})
+                    <div className="text-[10px] text-white/50">
+                      목표 {player.target} ({remainingScore}/{remainingFinishCount})
                     </div>
                   </div>
 
-                  {/* 득점 터치 존 (상단 ~85%) */}
-                  <button
-                    type="button"
-                    onClick={() => handleScoreAdd(index)}
-                    disabled={!isActive}
-                    className={[
-                      "flex min-h-0 flex-1 touch-manipulation items-center justify-center",
-                      isActive ? "cursor-pointer active:bg-white/5" : "cursor-default pointer-events-none",
-                    ].join(" ")}
-                    aria-label={`${index + 1}번 선수 득점`}
-                  >
-                    {isCushion ? (
-                      <span className="text-[clamp(2rem,12vw,6rem)] font-extrabold leading-none text-[#1fe85b]">
-                        쿠션
-                      </span>
-                    ) : (
-                      <span
-                        className={[
-                          "text-[clamp(3rem,30vmin,8rem)] font-black leading-none tracking-tight",
-                          colorTextClasses[index],
-                        ].join(" ")}
-                      >
-                        {player.score}
-                      </span>
-                    )}
-                  </button>
+                  {/* 점수 + 득점 버튼 (숫자/쿠션 + +버튼) */}
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4">
+                    <button
+                      type="button"
+                      onClick={() => handleScoreAdd(index)}
+                      disabled={!isActive}
+                      className={[
+                        "flex touch-manipulation flex-col items-center justify-center gap-1 rounded-2xl px-6 py-4 transition-all",
+                        isActive
+                          ? "cursor-pointer active:scale-95 active:bg-white/5"
+                          : "cursor-default pointer-events-none",
+                      ].join(" ")}
+                      aria-label={`${index + 1}번 선수 득점`}
+                    >
+                      {isCushion ? (
+                        <span className="text-[clamp(2.5rem,15vmin,7rem)] font-black leading-none text-[#1fe85b]">
+                          쿠션
+                        </span>
+                      ) : (
+                        <span
+                          className={[
+                            "text-[clamp(4rem,35vmin,10rem)] font-black leading-none tracking-tight",
+                            colorTextClasses[index],
+                          ].join(" ")}
+                        >
+                          {player.score}
+                        </span>
+                      )}
+                      {isActive && !isCushion && (
+                        <span className="flex items-center gap-1 text-[14px] font-bold text-[#1fe85b]">
+                          <Plus className="h-5 w-5" /> 득점
+                        </span>
+                      )}
+                    </button>
+                  </div>
 
-                  {/* 차감 터치 존 (하단 ~15%) */}
-                  <button
-                    type="button"
-                    onClick={() => handleScoreSubtract(index)}
-                    disabled={!isActive}
-                    className={[
-                      "flex min-h-[56px] shrink-0 items-center justify-center border-t border-white/10 text-[18px] font-extrabold text-white/60 transition-colors",
-                      isActive
-                        ? "active:bg-red-500/20 hover:bg-white/5"
-                        : "cursor-default pointer-events-none",
-                    ].join(" ")}
-                    aria-label={`${index + 1}번 선수 차감`}
-                  >
-                    -{delta}
-                  </button>
-
-                  <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/5 px-3 py-1.5 text-[11px]">
-                    <span className="font-semibold text-white/70">
-                      이닝 {inningsValue}
-                    </span>
+                  <div className="flex shrink-0 items-center justify-between border-t border-white/5 px-3 py-1 text-[11px]">
+                    <span className="font-semibold text-white/60">이닝 {inningsValue}</span>
                     <span className="font-bold text-[#1fe85b]">
-                      평균 {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                      {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
                     </span>
                   </div>
                 </div>
               );
             })}
 
-            {/* 중앙: 컨트롤 바 (~20% 너비, 여백 포함) */}
-            <div className="flex w-[min(20vw,100px)] min-w-[80px] flex-col justify-center gap-3 border-x border-white/10 bg-[#151515] px-3 py-6">
+            {/* 중앙(2): 컨트롤 바 - 세로 꽉 채움 */}
+            <div
+              className={[
+                "flex flex-col justify-center gap-2 border-x border-white/10 px-3 py-4 transition-colors duration-300",
+                activeIndex === 0
+                  ? "bg-orange-950/30"
+                  : "bg-blue-950/30",
+              ].join(" ")}
+            >
               <button
                 type="button"
                 onClick={handleTurnPass}
-                className="flex min-h-[52px] items-center justify-center rounded-lg bg-[#ff2d61] px-4 py-3 text-[14px] font-extrabold text-white shadow-lg transition-transform active:scale-95"
+                className="flex min-h-[64px] items-center justify-center rounded-xl bg-[#ff2d61] px-4 py-4 text-[18px] font-black text-white shadow-lg transition-transform active:scale-95"
               >
                 턴 넘기기
               </button>
@@ -519,16 +516,29 @@ function PlayContent() {
                 className={[
                   "flex min-h-[48px] items-center justify-center rounded-lg px-4 py-3 text-[13px] font-extrabold transition-transform active:scale-95",
                   history.length === 0
-                    ? "cursor-not-allowed bg-[#2a2a2a] text-white/40"
-                    : "bg-[#3a3a3a] text-white",
+                    ? "cursor-not-allowed bg-zinc-800 text-white/40"
+                    : "bg-zinc-700 text-white",
                 ].join(" ")}
               >
                 되돌리기
               </button>
               <button
                 type="button"
+                onClick={() => handleScoreSubtract(activeIndex)}
+                disabled={players[activeIndex]?.score === 0}
+                className={[
+                  "flex min-h-[48px] items-center justify-center rounded-lg px-4 py-3 text-[16px] font-extrabold transition-transform active:scale-95",
+                  (players[activeIndex]?.score ?? 0) === 0
+                    ? "cursor-not-allowed bg-zinc-800 text-white/40"
+                    : "bg-zinc-600 text-white",
+                ].join(" ")}
+              >
+                -{delta}
+              </button>
+              <button
+                type="button"
                 onClick={handleGameEnd}
-                className="flex min-h-[48px] items-center justify-center rounded-lg bg-[#2a2a2a] px-4 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-95"
+                className="flex min-h-[48px] items-center justify-center rounded-lg bg-zinc-800 px-4 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-95"
               >
                 게임 종료
               </button>
@@ -863,8 +873,15 @@ function PlayContent() {
         )}
       </main>
 
-      {/* Control Bar */}
-      <div className="fixed inset-x-0 bottom-0 bg-[#0b0b0b] pb-7">
+      {/* Control Bar - 세로모드에서만 표시 */}
+      <div
+        className={[
+          "fixed inset-x-0 bottom-0 bg-[#0b0b0b] pb-7",
+          isLandscapeTwoPlayer && "landscape:hidden",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <div className="mx-auto w-full max-w-[420px] px-6">
           <button
             type="button"
