@@ -22,7 +22,9 @@ export type SaveMatchParams = {
   gameType?: "3" | "4";
 };
 
-export async function saveMatch(params: SaveMatchParams): Promise<boolean> {
+export type SaveMatchResult = { ok: boolean; error?: string };
+
+export async function saveMatch(params: SaveMatchParams): Promise<SaveMatchResult> {
   const {
     myScore,
     opponentScore,
@@ -35,35 +37,47 @@ export async function saveMatch(params: SaveMatchParams): Promise<boolean> {
   } = params;
   const supabase = createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.error("saveMatch session error:", sessionError);
+      return { ok: false, error: sessionError.message };
+    }
+    const user = session?.user;
+    if (!user) {
+      return { ok: false, error: "로그인이 필요합니다" };
+    }
 
-  const resolvedOpponentScore =
-    secondPlaceScore !== undefined ? secondPlaceScore : opponentScore;
+    const resolvedOpponentScore =
+      secondPlaceScore !== undefined ? secondPlaceScore : opponentScore;
 
-  const insertData: Record<string, unknown> = {
-    user_id: user?.id ?? null,
-    my_score: myScore,
-    opponent_score: resolvedOpponentScore,
-    innings,
-    is_win: isWin,
-  };
-  if (rankings && rankings.length > 0) {
-    insertData.rankings = rankings;
-  }
-  if (opponentName != null) {
-    insertData.opponent_name = opponentName;
-  }
-  if (gameType) {
-    insertData.game_type = gameType;
-  }
+    const insertData: Record<string, unknown> = {
+      user_id: user.id,
+      my_score: myScore,
+      opponent_score: resolvedOpponentScore,
+      innings,
+      is_win: isWin,
+    };
+    if (rankings && rankings.length > 0) {
+      insertData.rankings = rankings;
+    }
+    if (opponentName != null) {
+      insertData.opponent_name = opponentName;
+    }
+    if (gameType) {
+      insertData.game_type = gameType;
+    }
 
-  const { error } = await supabase.from("matches").insert(insertData);
+    const { error } = await supabase.from("matches").insert(insertData);
 
-  if (error) {
-    console.error("saveMatch error:", error);
-    return false;
+    if (error) {
+      console.error("saveMatch error:", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("saveMatch unexpected error:", err);
+    return { ok: false, error: msg };
   }
-  return true;
 }

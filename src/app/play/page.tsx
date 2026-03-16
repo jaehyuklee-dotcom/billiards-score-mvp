@@ -1339,7 +1339,7 @@ function PlayContent() {
                   name: players[e.playerIndex]?.name ?? `선수 ${e.playerIndex + 1}`,
                   score: players[e.playerIndex]?.score ?? 0,
                 }));
-              const ok = await saveMatch({
+              const result = await saveMatch({
                 myScore,
                 opponentScore: 0,
                 innings: myInnings,
@@ -1348,13 +1348,16 @@ function PlayContent() {
                 rankings,
                 gameType,
               });
-              if (ok) router.push("/");
-              else alert("저장에 실패했습니다.");
+              if (result.ok) {
+                router.push("/");
+              } else {
+                alert(`저장 실패: ${result.error ?? "알 수 없는 오류"}`);
+              }
             } else {
               const opponentScore = players[1]?.score ?? 0;
               const winnerIdx = players.findIndex((p) => p.name === winnerName);
               const isWin = winnerIdx === 0;
-              const ok = await saveMatch({
+              const result = await saveMatch({
                 myScore,
                 opponentScore,
                 innings: myInnings,
@@ -1362,8 +1365,11 @@ function PlayContent() {
                 opponentName: players[1]?.name ?? null,
                 gameType,
               });
-              if (ok) router.push("/");
-              else alert("저장에 실패했습니다.");
+              if (result.ok) {
+                router.push("/");
+              } else {
+                alert(`저장 실패: ${result.error ?? "알 수 없는 오류"}`);
+              }
             }
           }}
         />

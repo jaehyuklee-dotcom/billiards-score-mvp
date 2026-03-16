@@ -110,13 +110,31 @@ CREATE POLICY "Users can update own profile"
   USING (auth.uid() = user_id);
 ```
 
-## 8. matches 테이블 - 3인 이상 경기 순위 저장 (선택)
+## 8. matches 테이블 - 경기 기록 저장
 
-3인 이상 경기 시 순위 정보를 저장하려면 matches 테이블에 `rankings` 컬럼을 추가하세요:
+### 8-1. 테이블이 없는 경우 (신규 설정)
+
+`supabase/migrations/create_matches_table.sql` 파일 내용을 Supabase SQL Editor에서 실행하세요.
+
+### 8-2. 테이블이 이미 있는 경우
+
+3인 이상 경기 순위 저장을 위해 아래 컬럼을 추가하세요:
 
 ```sql
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS opponent_name TEXT;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS game_type TEXT DEFAULT '4';
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS rankings JSONB;
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS club_name TEXT;
+```
+
+### 8-3. RLS 정책 (저장 실패 시 확인)
+
+matches 테이블에 RLS가 활성화되어 있다면, **INSERT** 정책이 필요합니다:
+
+```sql
+CREATE POLICY "Users can insert own matches"
+  ON matches FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
 ```
 
 rankings 형식: `[{ "playerIndex": 0, "rank": 1, "name": "이름", "score": 400 }, ...]`
