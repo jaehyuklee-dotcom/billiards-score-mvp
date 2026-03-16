@@ -2,6 +2,7 @@
 
 import { saveMatch } from "@/lib/matches";
 import { createClient } from "@/lib/supabase/client";
+import { isFullscreen, toggleFullscreen } from "@/lib/fullscreen";
 import { ChevronLeft, Clock, Maximize2, Minimize2, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
@@ -269,11 +270,19 @@ function PlayContent() {
     setHistory((prev) => [...prev, snapshot()]);
   };
 
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenActive, setFullscreenActive] = useState(false);
   useEffect(() => {
-    const handler = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", handler);
-    return () => document.removeEventListener("fullscreenchange", handler);
+    const handler = () => setFullscreenActive(isFullscreen());
+    handler();
+    const doc = document as Document & { webkitfullscreenchange?: string; msfullscreenchange?: string };
+    doc.addEventListener("fullscreenchange", handler);
+    doc.addEventListener?.("webkitfullscreenchange", handler);
+    doc.addEventListener?.("MSFullscreenChange", handler);
+    return () => {
+      doc.removeEventListener("fullscreenchange", handler);
+      doc.removeEventListener?.("webkitfullscreenchange", handler);
+      doc.removeEventListener?.("MSFullscreenChange", handler);
+    };
   }, []);
 
   useEffect(() => {
@@ -284,16 +293,8 @@ function PlayContent() {
     return () => clearInterval(id);
   }, [gameStartMs, showWinModal]);
 
-  const toggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await document.documentElement.requestFullscreen();
-      }
-    } catch {
-      // ignore
-    }
+  const handleToggleFullscreen = () => {
+    toggleFullscreen();
   };
 
   const handleScoreAdd = (index: number) => {
@@ -386,12 +387,12 @@ function PlayContent() {
   const isTwoPlayer = players.length === 2;
 
   return (
-    <div className="min-h-screen bg-[#0b0b0b] text-white">
+    <div className="flex h-screen h-svh max-h-dvh min-h-0 flex-col overflow-hidden bg-[#0b0b0b] text-white">
       {/* ========== 가로모드 레이아웃 (거치형 스코어보드) ========== */}
       {isLandscapeMode && (
-        <div className="hidden h-screen flex-col landscape:flex">
+        <div className="hidden h-full min-h-0 flex-1 flex-col landscape:flex">
           {/* 상단 바 최소화 */}
-          <header className="flex shrink-0 items-center justify-between border-b border-white/5 bg-zinc-900/80 px-2 py-1">
+          <header className="flex shrink-0 items-center justify-between border-b border-white/5 bg-zinc-900/80 px-1 py-0.5">
             <button
               type="button"
               onClick={() => router.push("/setup")}
@@ -403,11 +404,11 @@ function PlayContent() {
             <span className="text-[12px] font-bold text-white/60">{gameType}구</span>
             <button
               type="button"
-              onClick={toggleFullscreen}
+              onClick={handleToggleFullscreen}
               className="inline-flex h-8 w-8 items-center justify-center rounded bg-white/10"
-              aria-label={isFullscreen ? "전체화면 나가기" : "전체화면"}
+              aria-label={fullscreenActive ? "전체화면 나가기" : "전체화면"}
             >
-              {isFullscreen ? (
+              {fullscreenActive ? (
                 <Minimize2 className="h-4 w-4" aria-hidden="true" />
               ) : (
                 <Maximize2 className="h-4 w-4" aria-hidden="true" />
@@ -416,7 +417,7 @@ function PlayContent() {
           </header>
 
           {isTwoPlayer ? (
-          <div className="grid min-h-0 flex-1 grid-cols-[4fr_2fr_4fr]">
+          <div className="grid min-h-0 flex-1 grid-cols-[4fr_2fr_4fr] gap-0 p-0">
             {/* 좌측(4): 1번 선수 */}
             {(() => {
               const index = 0;
@@ -436,19 +437,19 @@ function PlayContent() {
                 <div
                   key={player.id}
                   className={[
-                    "flex flex-col border-r border-white/5 bg-zinc-900",
+                    "flex flex-col border-r border-white/5 bg-zinc-900 p-1",
                     isActive
                       ? "ring-2 ring-inset ring-[#1fe85b]/50 border-l-4 border-l-orange-500 shadow-[0_0_24px_rgba(249,115,22,0.4)] transition-shadow duration-300"
                       : "opacity-50",
                   ].join(" ")}
                 >
-                  <div className="flex shrink-0 items-center justify-between px-4 pt-2">
+                  <div className="flex shrink-0 items-center justify-between px-2 pt-1">
                     <span className="text-[12px] font-bold text-white/80">1P</span>
                   </div>
-                  <div className="flex shrink-0 justify-center py-1">
-                    <span className="text-[15px] font-bold text-white">{player.name}</span>
+                  <div className="flex shrink-0 justify-center py-0.5">
+                    <span className="text-[clamp(12px,2vmin,15px)] font-bold text-white">{player.name}</span>
                   </div>
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-2">
                     <button
                       type="button"
                       onClick={() => handleScoreAdd(index)}
@@ -479,7 +480,7 @@ function PlayContent() {
                       )}
                     </button>
                   </div>
-                  <div className="flex shrink-0 flex-col items-center gap-0.5 border-t border-white/5 py-2 text-[12px]">
+                  <div className="flex shrink-0 flex-col items-center gap-0.5 border-t border-white/5 py-1 text-[11px]">
                     <div className="flex items-center gap-4">
                       <span className="text-white/70">이닝 {inningsValue}</span>
                       <span className="font-bold text-[#1fe85b]">
@@ -494,7 +495,7 @@ function PlayContent() {
             {/* 중앙(2): 플레이 시간, -10, 턴 종료, 되돌리기, 게임 종료, 현재 턴 */}
             <div
               className={[
-                "flex flex-col justify-between border-x border-white/10 bg-zinc-900/50 px-3 py-4 transition-colors duration-300",
+                "flex flex-col justify-between border-x border-white/10 bg-zinc-900/50 px-1.5 py-2 transition-colors duration-300",
                 activeIndex === 0
                   ? "bg-orange-950/20"
                   : "bg-blue-950/20",
@@ -585,19 +586,19 @@ function PlayContent() {
                 <div
                   key={player.id}
                   className={[
-                    "flex flex-col border-l border-white/5 bg-zinc-900",
+                    "flex flex-col border-l border-white/5 bg-zinc-900 p-1",
                     isActive
                       ? "ring-2 ring-inset ring-[#1fe85b]/50 border-r-4 border-r-blue-500 shadow-[0_0_24px_rgba(59,130,246,0.4)] transition-shadow duration-300"
                       : "opacity-50",
                   ].join(" ")}
                 >
-                  <div className="flex shrink-0 items-center justify-end px-4 pt-2">
+                  <div className="flex shrink-0 items-center justify-end px-2 pt-1">
                     <span className="text-[12px] font-bold text-white/80">2P</span>
                   </div>
-                  <div className="flex shrink-0 justify-center py-1">
-                    <span className="text-[15px] font-bold text-white">{player.name}</span>
+                  <div className="flex shrink-0 justify-center py-0.5">
+                    <span className="text-[clamp(12px,2vmin,15px)] font-bold text-white">{player.name}</span>
                   </div>
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-2">
                     <button
                       type="button"
                       onClick={() => handleScoreAdd(index)}
@@ -628,7 +629,7 @@ function PlayContent() {
                       )}
                     </button>
                   </div>
-                  <div className="flex shrink-0 flex-col items-center gap-0.5 border-t border-white/5 py-2 text-[12px]">
+                  <div className="flex shrink-0 flex-col items-center gap-0.5 border-t border-white/5 py-1 text-[11px]">
                     <div className="flex items-center gap-4">
                       <span className="text-white/70">이닝 {inningsValue}</span>
                       <span className="font-bold text-[#1fe85b]">
@@ -879,26 +880,39 @@ function PlayContent() {
       {/* ========== 세로모드 레이아웃 (기존 UI) - 세로화면에서만 ========== */}
       <main
         className={[
-          "mx-auto min-h-screen w-full max-w-[420px] pb-[172px]",
+          "flex min-h-0 flex-1 flex-col overflow-hidden landscape:hidden",
           isLandscapeMode && "landscape:hidden",
         ]
           .filter(Boolean)
           .join(" ")}
       >
-        <header className="flex h-14 items-center justify-center border-b border-white/10 bg-[#1a1a1a] px-4">
+        <header className="flex h-[7vh] min-h-[44px] shrink-0 items-center justify-between border-b border-white/10 bg-[#1a1a1a] px-2">
           <button
             type="button"
             onClick={() => router.push("/setup")}
-            className="absolute left-[max(16px,calc((100vw-420px)/2+16px))] inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#d9d9d9]/70"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#d9d9d9]/70"
             aria-label="홈으로"
           >
             <ChevronLeft className="h-5 w-5 text-black/70" aria-hidden="true" />
           </button>
-          <div className="text-[16px] font-extrabold text-white/80">
+          <div className="text-[14px] font-extrabold text-white/80">
             종목 : {gameType}구
           </div>
+          <button
+            type="button"
+            onClick={handleToggleFullscreen}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#d9d9d9]/70"
+            aria-label={fullscreenActive ? "전체화면 나가기" : "전체화면"}
+          >
+            {fullscreenActive ? (
+              <Minimize2 className="h-5 w-5 text-black/70" aria-hidden="true" />
+            ) : (
+              <Maximize2 className="h-5 w-5 text-black/70" aria-hidden="true" />
+            )}
+          </button>
         </header>
 
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {players.length === 2 ? (
           <>
             {players.map((player, index) => {
@@ -921,7 +935,7 @@ function PlayContent() {
                 <section
                   key={player.id}
                   className={[
-                    "px-6 py-6 bg-[#1a1a1a]",
+                    "flex min-h-0 flex-1 flex-col justify-center px-4 py-2 bg-[#1a1a1a]",
                     isFirst ? "" : "border-t border-black/60",
                     isActive
                       ? `relative z-10 border-y border-white/20 ${
@@ -1004,19 +1018,19 @@ function PlayContent() {
                       );
                     }}
                     className={[
-                      "mt-8 flex w-full items-center justify-center py-10",
+                      "mt-2 flex min-h-0 flex-1 flex-col items-center justify-center py-4",
                       isActive ? "" : "pointer-events-none",
                     ].join(" ")}
                     aria-label={`${index + 1}번 선수 득점`}
                   >
                     {isCushion ? (
-                      <div className="text-[80px] font-extrabold leading-none text-[#1fe85b]">
+                      <div className="text-[clamp(3rem,15vh,80px)] font-extrabold leading-none text-[#1fe85b]">
                         쿠션
                       </div>
                     ) : (
                       <div
                         className={[
-                          "text-[120px] font-extrabold leading-none",
+                          "text-[clamp(4rem,22vh,120px)] font-extrabold leading-none",
                           colorTextClasses[index] ?? "text-white",
                         ].join(" ")}
                       >
@@ -1048,8 +1062,8 @@ function PlayContent() {
             })}
           </>
         ) : (
-          <section className="px-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-2">
+            <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2">
               {players.map((player, index) => {
                 const isActive = index === activeIndex && !isCompleted(index);
                 const completed = isCompleted(index);
@@ -1200,18 +1214,19 @@ function PlayContent() {
             </div>
           </section>
         )}
+        </div>
       </main>
 
       {/* Control Bar - 세로모드에서만 표시 */}
       <div
         className={[
-          "fixed inset-x-0 bottom-0 bg-[#0b0b0b] pb-7",
+          "shrink-0 bg-[#0b0b0b] px-4 pb-safe pt-2 landscape:hidden",
           isLandscapeMode && "landscape:hidden",
         ]
           .filter(Boolean)
           .join(" ")}
       >
-        <div className="mx-auto w-full max-w-[420px] px-6">
+        <div className="mx-auto max-w-[420px]">
           <button
             type="button"
             onClick={() => {
@@ -1224,12 +1239,12 @@ function PlayContent() {
                 return newInnings;
               });
             }}
-            className="mt-4 flex h-[60px] w-full items-center justify-center rounded-md bg-[#ff2d61] text-[24px] font-extrabold text-white"
+            className="flex h-[7vh] min-h-[48px] max-h-[60px] w-full flex-1 items-center justify-center rounded-md bg-[#ff2d61] text-[clamp(18px,4vw,24px)] font-extrabold text-white"
           >
             턴 넘기기
           </button>
 
-          <div className="mt-4 grid grid-cols-3 gap-4">
+          <div className="mt-2 grid flex-1 grid-cols-3 gap-2">
             <button
               type="button"
               disabled={history.length === 0}
@@ -1246,7 +1261,7 @@ function PlayContent() {
                 });
               }}
               className={[
-                "flex h-[56px] items-center justify-center rounded-md text-[18px] font-extrabold",
+                "flex h-[6vh] min-h-[44px] max-h-[56px] items-center justify-center rounded-md text-[clamp(14px,3.5vw,18px)] font-extrabold",
                 history.length === 0
                   ? "bg-[#3a3a3a] text-white/40"
                   : "bg-[#3a3a3a] text-white",
@@ -1266,7 +1281,7 @@ function PlayContent() {
                   )
                 );
               }}
-              className="flex h-[56px] items-center justify-center rounded-md bg-[#7b7b7b] text-[22px] font-extrabold text-white"
+              className="flex h-[6vh] min-h-[44px] max-h-[56px] items-center justify-center rounded-md bg-[#7b7b7b] text-[clamp(16px,4vw,22px)] font-extrabold text-white"
             >
               -{delta}
             </button>
@@ -1277,7 +1292,7 @@ function PlayContent() {
                 setWinnerName(current.name);
                 setShowWinModal(true);
               }}
-              className="flex h-[56px] items-center justify-center rounded-md bg-[#2a2a2a] text-[20px] font-extrabold text-white"
+              className="flex h-[6vh] min-h-[44px] max-h-[56px] items-center justify-center rounded-md bg-[#2a2a2a] text-[clamp(16px,3.5vw,20px)] font-extrabold text-white"
             >
               게임 종료
             </button>

@@ -4,6 +4,7 @@ import { ChevronLeft, Play, UserPlus, UserMinus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { requestFullscreen } from "@/lib/fullscreen";
 
 type PlayerSetup = {
   id: number;
@@ -264,7 +265,7 @@ export default function SetupPage() {
 
           <button
             disabled={!canStart}
-            onClick={() => {
+            onClick={async () => {
               const { invalidIdx, message } = validateAllScores();
               if (invalidIdx !== null) {
                 alert(message);
@@ -282,6 +283,8 @@ export default function SetupPage() {
                 g: gameType,
                 players: JSON.stringify(playersToSend),
               });
+              // 사용자 제스처 내에서 전체화면 요청 후 이동
+              await requestFullscreen(document.documentElement);
               router.push(`/play?${params.toString()}`);
             }}
             className={`flex h-[78px] w-full items-center justify-center gap-4 rounded-2xl text-[26px] font-extrabold ${canStart ? "bg-[#1fe85b] text-[#0b0b0b]" : "bg-[#1fe85b]/50 text-[#0b0b0b]/70"}`}
