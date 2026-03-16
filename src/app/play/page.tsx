@@ -1,9 +1,9 @@
 "use client";
 
 import { saveMatch } from "@/lib/matches";
-import { ChevronLeft, Trophy } from "lucide-react";
+import { ChevronLeft, Maximize2, Minimize2, Trophy } from "lucide-react";
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function clampToNonNegative(n: number) {
@@ -260,9 +260,292 @@ function PlayContent() {
     setHistory((prev) => [...prev, snapshot()]);
   };
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleScoreAdd = (index: number) => {
+    if (index !== activeIndex) return;
+    const current = players[index];
+    const isCurrentlyCushion = current.score >= current.target;
+
+    if (isCurrentlyCushion) {
+      pushHistory();
+      setRemainingFinish((prev) => {
+        const copy = [...prev];
+        const before = copy[index] ?? 0;
+        const next = before - 1;
+        copy[index] = next;
+        if (next <= 0) {
+          if (players.length <= 2) {
+            setWinnerName(current.name);
+            setShowWinModal(true);
+          } else {
+            setCompletedRanks((prev) => {
+              if (prev.some((e) => e.playerIndex === index)) return prev;
+              const newRank = prev.length + 1;
+              const updated = [...prev, { playerIndex: index, rank: newRank }];
+              const remainingCount = players.length - updated.length;
+              if (remainingCount === 1) {
+                const lastIdx = players.findIndex((_, i) =>
+                  !updated.some((e) => e.playerIndex === i)
+                );
+                if (lastIdx >= 0 && !updated.some((e) => e.playerIndex === lastIdx)) {
+                  updated.push({ playerIndex: lastIdx, rank: players.length });
+                  setWinnerName(players[lastIdx].name);
+                }
+                setShowWinModal(true);
+              }
+              return updated;
+            });
+            setActiveIndex((prev) => getNextActiveIndexExcluding(prev, index));
+          }
+        }
+        return copy;
+      });
+      return;
+    }
+
+    pushHistory();
+    setPlayers((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, score: p.score + delta } : p))
+    );
+  };
+
+  const handleScoreSubtract = (index: number) => {
+    if (index !== activeIndex) return;
+    pushHistory();
+    setPlayers((prev) =>
+      prev.map((p, i) =>
+        i === index ? { ...p, score: clampToNonNegative(p.score - delta) } : p
+      )
+    );
+  };
+
+  const handleTurnPass = () => {
+    const nextIndex = getNextActiveIndex(activeIndex);
+    pushHistory();
+    setActiveIndex(nextIndex);
+    setInnings((prev) => {
+      const newInnings = [...prev];
+      newInnings[nextIndex] = (prev[nextIndex] ?? 0) + 1;
+      return newInnings;
+    });
+  };
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const last = history[history.length - 1];
+    setPlayers(last.players.map((p) => ({ ...p })));
+    setActiveIndex(last.activeIndex);
+    setInnings([...last.innings]);
+    setRemainingFinish([...last.remainingFinish]);
+    setCompletedRanks(last.completedRanks ?? []);
+    setHistory((prev) => prev.slice(0, -1));
+  };
+
+  const handleGameEnd = () => {
+    const current = players[activeIndex];
+    setWinnerName(current.name);
+    setShowWinModal(true);
+  };
+
+  const isLandscapeTwoPlayer = players.length === 2;
+
   return (
     <div className="min-h-screen bg-[#0b0b0b] text-white">
-      <main className="mx-auto min-h-screen w-full max-w-[420px] pb-[172px]">
+      {/* ========== 가로모드 레이아웃 (거치형 스코어보드) ========== */}
+      {isLandscapeTwoPlayer && (
+        <div className="hidden h-screen flex-col landscape:flex">
+          <header className="flex shrink-0 items-center justify-center border-b border-white/10 bg-[#1a1a1a] px-4 py-2">
+            <button
+              type="button"
+              onClick={() => router.push("/setup")}
+              className="absolute left-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#d9d9d9]/70"
+              aria-label="홈으로"
+            >
+              <ChevronLeft className="h-5 w-5 text-black/70" aria-hidden="true" />
+            </button>
+            <div className="text-[18px] font-extrabold text-white/80">
+              {gameType}구
+            </div>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="absolute right-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-white/10 text-white/80 transition-colors hover:bg-white/20"
+              aria-label={isFullscreen ? "전체화면 나가기" : "전체화면"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Maximize2 className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          </header>
+
+          <div className="grid min-h-0 flex-1 grid-cols-[1fr_auto_1fr]">
+            {/* 왼쪽: 1번 선수 */}
+            {[0, 1].map((index) => {
+              const player = players[index];
+              const isActive = index === activeIndex;
+              const rawInningsValue = innings[index];
+              const inningsValue =
+                typeof rawInningsValue === "number" && Number.isFinite(rawInningsValue)
+                  ? rawInningsValue
+                  : 0;
+              const avg =
+                inningsValue > 0 && Number.isFinite(player.score)
+                  ? player.score / delta / inningsValue
+                  : 0;
+              const remainingScore = Math.max(0, player.target - player.score);
+              const remainingFinishCount = remainingFinish[index] ?? 0;
+              const isCushion = player.score >= player.target;
+              const neonBorder =
+                index === 0
+                  ? "shadow-[0_0_20px_rgba(249,115,22,0.6)]"
+                  : "shadow-[0_0_20px_rgba(59,130,246,0.6)]";
+
+              return (
+                <div
+                  key={player.id}
+                  className={[
+                    "flex flex-col border-r border-l border-white/5",
+                    index === 1 && "border-l-0",
+                    isActive
+                      ? `bg-[#1a1a1a] ${index === 0 ? "border-l-4 border-l-orange-500" : "border-r-4 border-r-blue-500"} ${neonBorder}`
+                      : "bg-[#0f0f0f] opacity-60",
+                  ].join(" ")}
+                >
+                  <div className="flex shrink-0 flex-col gap-1 px-3 py-2">
+                    <div
+                      className={[
+                        "inline-flex w-fit rounded-md px-3 py-1 text-[12px] font-extrabold text-white",
+                        colorBgClasses[index],
+                      ].join(" ")}
+                    >
+                      {index + 1}번 선수
+                    </div>
+                    <div className="truncate text-[14px] font-bold text-white/90">
+                      {player.name}
+                    </div>
+                    <div className="text-[11px] font-semibold text-white/50">
+                      목표 {player.target} ({remainingScore} / {remainingFinishCount})
+                    </div>
+                  </div>
+
+                  {/* 득점 터치 존 (상단 ~85%) */}
+                  <button
+                    type="button"
+                    onClick={() => handleScoreAdd(index)}
+                    disabled={!isActive}
+                    className={[
+                      "flex min-h-0 flex-1 touch-manipulation items-center justify-center",
+                      isActive ? "cursor-pointer active:bg-white/5" : "cursor-default pointer-events-none",
+                    ].join(" ")}
+                    aria-label={`${index + 1}번 선수 득점`}
+                  >
+                    {isCushion ? (
+                      <span className="text-[clamp(2rem,12vw,6rem)] font-extrabold leading-none text-[#1fe85b]">
+                        쿠션
+                      </span>
+                    ) : (
+                      <span
+                        className={[
+                          "text-[clamp(3rem,30vmin,8rem)] font-black leading-none tracking-tight",
+                          colorTextClasses[index],
+                        ].join(" ")}
+                      >
+                        {player.score}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 차감 터치 존 (하단 ~15%) */}
+                  <button
+                    type="button"
+                    onClick={() => handleScoreSubtract(index)}
+                    disabled={!isActive}
+                    className={[
+                      "flex min-h-[56px] shrink-0 items-center justify-center border-t border-white/10 text-[18px] font-extrabold text-white/60 transition-colors",
+                      isActive
+                        ? "active:bg-red-500/20 hover:bg-white/5"
+                        : "cursor-default pointer-events-none",
+                    ].join(" ")}
+                    aria-label={`${index + 1}번 선수 차감`}
+                  >
+                    -{delta}
+                  </button>
+
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/5 px-3 py-1.5 text-[11px]">
+                    <span className="font-semibold text-white/70">
+                      이닝 {inningsValue}
+                    </span>
+                    <span className="font-bold text-[#1fe85b]">
+                      평균 {Number.isFinite(avg) ? avg.toFixed(3) : "0.000"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* 중앙: 컨트롤 바 (~20% 너비, 여백 포함) */}
+            <div className="flex w-[min(20vw,100px)] min-w-[80px] flex-col justify-center gap-3 border-x border-white/10 bg-[#151515] px-3 py-6">
+              <button
+                type="button"
+                onClick={handleTurnPass}
+                className="flex min-h-[52px] items-center justify-center rounded-lg bg-[#ff2d61] px-4 py-3 text-[14px] font-extrabold text-white shadow-lg transition-transform active:scale-95"
+              >
+                턴 넘기기
+              </button>
+              <button
+                type="button"
+                disabled={history.length === 0}
+                onClick={handleUndo}
+                className={[
+                  "flex min-h-[48px] items-center justify-center rounded-lg px-4 py-3 text-[13px] font-extrabold transition-transform active:scale-95",
+                  history.length === 0
+                    ? "cursor-not-allowed bg-[#2a2a2a] text-white/40"
+                    : "bg-[#3a3a3a] text-white",
+                ].join(" ")}
+              >
+                되돌리기
+              </button>
+              <button
+                type="button"
+                onClick={handleGameEnd}
+                className="flex min-h-[48px] items-center justify-center rounded-lg bg-[#2a2a2a] px-4 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-95"
+              >
+                게임 종료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== 세로모드 레이아웃 (기존 UI) - 3인+ 또는 세로화면 ========== */}
+      <main
+        className={[
+          "mx-auto min-h-screen w-full max-w-[420px] pb-[172px]",
+          isLandscapeTwoPlayer && "landscape:hidden",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <header className="flex h-14 items-center justify-center border-b border-white/10 bg-[#1a1a1a] px-4">
           <button
             type="button"
